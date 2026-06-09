@@ -995,6 +995,7 @@ let rosterExpanded={}; // hull -> bool
 function loadFleetFile(ev){
   if(!mpCanAct()){alert('Spectators cannot act.');ev.target.value='';return}
   const files=[...ev.target.files]; if(!files.length)return;
+  builderShips=[]; // replace whatever's in the build panel with the newly uploaded fleet(s)
   let pending=files.length;
   files.forEach(file=>{
     const r=new FileReader();
@@ -1002,9 +1003,9 @@ function loadFleetFile(ev){
       try{
         const parsed=parseFleetFile(r.result);
         parsed.ships.forEach(s=>{
-          // add to roster if this hull+points design isn't already there
-          if(!shipRoster.some(d=>d.hull===s.hull&&d.points===s.points&&d.missilePoints===s.missilePoints)){
-            shipRoster.push(s);
+          // add to roster if this player doesn't already have this hull+points design
+          if(!shipRoster.some(d=>d.owner===activePlayer&&d.hull===s.hull&&d.points===s.points&&d.missilePoints===s.missilePoints)){
+            shipRoster.push(Object.assign({owner:activePlayer},s));
           }
           // also push this fleet's ships into the fleet currently being built
           builderShips.push({hull:s.hull,name:s.name,points:s.points,missilePoints:s.missilePoints,missileQty:s.missileQty});
@@ -1024,13 +1025,19 @@ function loadFleetFile(ev){
   });
   ev.target.value='';
 }
+function rosterVisibleToActive(d){
+  // strict per-player in a live game; in solo, show own + any ownerless legacy designs
+  return mpRoom ? (d.owner===activePlayer) : (!d.owner || d.owner===activePlayer);
+}
 function renderRoster(){
   const el=document.getElementById('roster-list');if(!el)return;
   el.innerHTML='';
-  if(!shipRoster.length){el.innerHTML='<span style="font-size:11px;color:#3a5a7a">no designs yet — upload .fleet files</span>';return}
+  const visible=shipRoster.filter(rosterVisibleToActive);
+  if(!visible.length){el.innerHTML='<span style="font-size:11px;color:#3a5a7a">no designs yet — upload .fleet files</span>';return}
   // group by faction -> hull
   const fac={};
   shipRoster.forEach((d,i)=>{
+    if(!rosterVisibleToActive(d))return;
     const f=d.faction||'Unknown';
     (fac[f]=fac[f]||{})[d.hull]=(fac[f][d.hull]||[]);
     fac[f][d.hull].push({d,i});
@@ -1219,7 +1226,9 @@ function refreshTemplateSelect(){
   const prev=sel.value;
   sel.innerHTML='<option value="">— none —</option>';
   fleetTemplates.forEach((t,i)=>{
-    if(t.owner&&t.owner!==activePlayer)return;
+    // strict: a template shows ONLY for its owner. (ownerless legacy templates show only in solo / no-room play)
+    const mine = mpRoom ? (t.owner===activePlayer) : (!t.owner || t.owner===activePlayer);
+    if(!mine)return;
     const pts=(t.shipsList?t.shipsList.reduce((a,s)=>a+s.points,0):(t.points||0));
     const o=document.createElement('option');o.value=i;
     o.textContent=t.name+' ('+pts+'p)';
@@ -1234,6 +1243,7 @@ function loadTemplateIntoBuilder(){
   if(i===''){clearComposition();return}
   const t=fleetTemplates[parseInt(i)];
   if(!t)return;
+  if(t.owner&&t.owner!==activePlayer){clearComposition();return} // safety: don't load others' templates
   if(t.shipsList)builderShips=t.shipsList.map(s=>({hull:s.hull,name:s.name,points:s.points,missilePoints:s.missilePoints,missileQty:s.missileQty}));
   else builderShips=[]; // legacy points template can't map to ships
   renderComposition();
@@ -1294,8 +1304,9 @@ function showFleetDetail(f){
   // add from roster (only at shipyard)
   html+=`<div style="flex:1;min-width:240px"><div style="font-size:10px;color:#5a7a9a;margin-bottom:3px">ADD FROM ROSTER ${atYard?'':'(move to a shipyard to add)'}</div><div style="display:flex;flex-direction:column;gap:2px;max-height:140px;overflow:auto">`;
   if(atYard){
-    if(!shipRoster.length)html+=`<span style="font-size:11px;color:#3a5a7a">roster empty — upload .fleet files</span>`;
-    const groups={};shipRoster.forEach((d,i)=>{(groups[d.hull]=groups[d.hull]||[]).push({d,i})});
+    const ownerVisible=d=>mpRoom?(d.owner===f.owner):(!d.owner||d.owner===f.owner);
+    if(!shipRoster.some(ownerVisible))html+=`<span style="font-size:11px;color:#3a5a7a">roster empty — upload .fleet files</span>`;
+    const groups={};shipRoster.forEach((d,i)=>{if(!ownerVisible(d))return;(groups[d.hull]=groups[d.hull]||[]).push({d,i})});
     Object.keys(groups).sort().forEach(hull=>{
       groups[hull].forEach(({d,i})=>{
         const c=computeShipCost(d.points,d.missilePoints);
@@ -1459,7 +1470,7 @@ function renderGameBar(){
   populateBuildSelects();
 }
 
-function switchPlayer(pid){activePlayer=pid;renderShips();renderGameBar();updateCapitalPhaseUI();refreshTemplateSelect()}
+function switchPlayer(pid){activePlayer=pid;builderShips=[];composition=[];const nm=document.getElementById('ship-name');if(nm)nm.value='';renderShips();renderGameBar();renderComposition();updateCapitalPhaseUI();refreshTemplateSelect()}
 
 function canEditResources(){
   if(!mpRoom)return true;  // solo / hotseat
@@ -1562,7 +1573,13 @@ function applyState(st){
   galaxyData=st.galaxy;
   ships=st.ships||[];
   shipIdCounter=st.shipIdCounter||ships.length;
-  activePlayer=st.activePlayer||'p1';
+  // In a live room, each client keeps viewing THEIR OWN selected player — don't let a
+  // remote snapshot (e.g. someone else ending their turn) yank everyone's view to another faction.
+  if(mpRoom && activePlayer && (st.playerState||{})[activePlayer]){
+    // keep current local activePlayer
+  } else {
+    activePlayer=st.activePlayer||'p1';
+  }
   turnNum=st.turnNum||1;
   playerState=st.playerState||{};
   capitalPhase=!!st.capitalPhase;
@@ -2096,8 +2113,8 @@ function renderShips(){
     txt.textContent=s.name;inner.appendChild(txt);
 
     g.appendChild(inner);
-    g.addEventListener('dblclick',ev=>{ev.stopPropagation();removeShip(s.id)});
-    g.addEventListener('click',ev=>{ev.stopPropagation();showFleetDetail(s)});
+    g.addEventListener('dblclick',ev=>{ev.stopPropagation();if(canViewFleet(s))removeShip(s.id)});
+    g.addEventListener('click',ev=>{ev.stopPropagation();if(canViewFleet(s))showFleetDetail(s);});
     enableDrag(g,s);
     layer.appendChild(g);
   });
@@ -2114,6 +2131,8 @@ function canMoveFleet(ship){
   // Otherwise only the active (selected) player may move their OWN tokens.
   return ship.owner===activePlayer;
 }
+// who may open/edit a fleet's detail panel: same rule as moving
+function canViewFleet(ship){return canMoveFleet(ship)}
 function enableDrag(g,ship){
   let dragging=false, moved=false, downX=0, downY=0;
   const svg=document.getElementById('map');
