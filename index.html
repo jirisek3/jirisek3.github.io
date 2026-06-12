@@ -146,6 +146,7 @@ try{ if(window.firebase){ firebase.initializeApp(FIREBASE_CONFIG); fbDB=firebase
     <div class="ctrl-group" style="justify-content:flex-end;gap:4px">
       <button onclick="rerollMapNames()" title="Re-assign random map names to all systems" style="font-size:11px">Re-roll map names</button>
       <button onclick="document.getElementById('mapnames-file').click()" title="Upload a .txt list of map names (one per line)" style="font-size:11px">Map names .txt</button>
+      <button onclick="startRegionLabel()" title="Click the map to place a large region/sector name (click a label to rename or delete)" style="font-size:11px">+ Region label</button>
       <input type="file" id="mapnames-file" accept=".txt,text/plain" style="display:none" onchange="loadMapNameList(event)">
     </div>
     <div class="ctrl-group" style="justify-content:flex-end"><button id="view-toggle" onclick="toggleView()">Player view: off</button></div>
@@ -214,6 +215,13 @@ try{ if(window.firebase){ firebase.initializeApp(FIREBASE_CONFIG); fbDB=firebase
           <label class="gb-label">Missile pts ÷ → explosives <input type="number" id="cfg-msexpdiv" value="8" min="1" title="Missile points divided by this = explosives cost of missiles" style="width:64px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px" onchange="setProdCfg('missileExpDiv',this.value)"></label>
           <label class="gb-label">Points per star <input type="number" id="cfg-ptsperstar" value="500" min="1" title="Fleet points divided by this = number of strength stars on the token" style="width:64px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px" onchange="setProdCfg('ptsPerStar',this.value)"></label>
           <label class="gb-label">Fleet pts per build pt <input type="number" id="cfg-fppbp" value="1" min="0.01" step="0.1" title="How many FLEET points one shipyard construction point buys (e.g. 10 = a 1000-pt fleet costs 100 build points)" style="width:64px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px" onchange="setProdCfg('fleetPtsPerBuildPt',this.value)"></label>
+          <label class="gb-label">Fleet AP / turn <input type="number" id="cfg-fleetap" value="6" min="1" title="Action points each fleet has per turn for hyperlane jumps (own land 3, hostile/neutral 6, gate -1)" style="width:64px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px" onchange="setFleetAP(this.value)"></label>
+          <label class="gb-label" style="display:flex;align-items:center;gap:6px">Fog of war (Player view) <input type="checkbox" id="cfg-fog" checked onchange="fogOfWar=this.checked;renderMap(galaxyData);renderShips();autoSave()"></label>
+          <label class="gb-label">Trade route +M/turn <input type="number" id="cfg-trm" value="5" min="0" style="width:64px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px" onchange="setTradeCfg('metals',this.value)"></label>
+          <label class="gb-label">Trade route +E/turn <input type="number" id="cfg-tre" value="2" min="0" style="width:64px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px" onchange="setTradeCfg('explosives',this.value)"></label>
+          <label class="gb-label">Dev: turns per level <input type="number" id="cfg-devturns" value="5" min="1" title="Owned systems gain a development level every N turns (max level 5)" style="width:64px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px" onchange="setDevCfg('turnsPerLevel',this.value)"></label>
+          <label class="gb-label">Dev: +% yield per level <input type="number" id="cfg-devpct" value="25" min="0" title="Each development level above 1 multiplies the system's resource yield by this much more" style="width:64px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px" onchange="setDevCfg('yieldPctPerLevel',this.value)"></label>
+          <label class="gb-label">Systems to win (0=off) <input type="number" id="cfg-winsys" value="0" min="0" title="When a player controls this many systems at turn end, victory is announced" style="width:64px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px" onchange="setWinSystems(this.value)"></label>
         </div>
         <div style="margin-top:10px"><label class="gb-label">Extra-shipyard bonus % <input type="number" id="cfg-extrayard" value="25" min="0" title="Each EXTRA shipyard on a system adds this % to its build-point output" style="width:60px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px" onchange="setExtraYard(this.value)"></label></div>
         <div style="margin-top:8px"><label class="gb-label">Point storage cap % <input type="number" id="cfg-ptcap" value="150" min="0" title="Max stored build points per system = its per-turn output × this %" style="width:60px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px" onchange="setPointCap(this.value)"></label></div>
@@ -228,10 +236,22 @@ try{ if(window.firebase){ firebase.initializeApp(FIREBASE_CONFIG); fbDB=firebase
 
   <div id="diplo-bar">
     <span class="setup-h" style="margin:0">Diplomacy</span>
-    <label>Give one of <span id="diplo-owner" style="font-weight:bold">your</span> systems <select id="diplo-system" style="min-width:150px"></select></label>
-    <label>to <select id="diplo-target"></select></label>
-    <button onclick="diploTransfer()">Transfer ownership</button>
-    <span style="font-size:10px;color:#3a5a7a">treaty transfer, independent of fleets present</span>
+    <label>with <select id="diplo-target" onchange="renderDiploBar()"></select></label>
+    <span id="diplo-relation" style="font-weight:bold"></span>
+    <button onclick="declareWar()" style="font-size:11px">Declare war</button>
+    <button onclick="proposeDiplo('peace')" style="font-size:11px">Propose peace</button>
+    <button onclick="proposeDiplo('treaty')" style="font-size:11px">Propose mil. treaty</button>
+    <span id="diplo-proposals" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"></span>
+    <span style="border-left:1px solid rgba(80,140,220,0.3);height:18px"></span>
+    <label>send <input type="number" id="send-m" value="0" min="0" style="width:62px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#c8d8f0;font-size:11px;padding:3px 6px;font-family:'Courier New',monospace"> M</label>
+    <label><input type="number" id="send-e" value="0" min="0" style="width:62px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#c8d8f0;font-size:11px;padding:3px 6px;font-family:'Courier New',monospace"> E</label>
+    <button onclick="sendResources()" style="font-size:11px" title="Send the entered metals/explosives to the target player">Send to target</button>
+    <button onclick="toggleTradeRoute()" style="font-size:11px" title="Select exactly 2 ADJACENT systems you own (a treaty ally's system can be the far end). Creates a trade route worth income each turn; hostile fleets at either end cut it. Click again with the same 2 selected to remove it.">Trade route ±</button>
+    <span style="border-left:1px solid rgba(80,140,220,0.3);height:18px"></span>
+    <span id="sel-info" style="color:#9ad4ff">0 selected — click / shift-click your systems on the map</span>
+    <button onclick="transferSelected()" style="font-size:11px">Transfer selected → target</button>
+    <button onclick="buildOnSelected()" style="font-size:11px">Build on selected</button>
+    <button onclick="clearSelection()" style="font-size:11px">Clear</button>
   </div>
 
   <div id="build-bar">
@@ -242,6 +262,24 @@ try{ if(window.firebase){ firebase.initializeApp(FIREBASE_CONFIG); fbDB=firebase
     <span id="build-cost-note" style="font-size:10px;color:#7a9ab8"></span>
     <span style="flex:1"></span>
     <span id="build-existing" style="font-size:10px;color:#5a7a9a"></span>
+  </div>
+
+  <div id="ledger-bar" style="background:rgba(10,18,32,0.98);border-bottom:1px solid rgba(80,140,220,0.2);padding:7px 14px;font-size:11px;color:#7a8fa8">
+    <span class="setup-h" style="margin:0;cursor:pointer" onclick="ledgerOpen=!ledgerOpen;renderLedger()">Ledger <span id="ledger-arrow">▸</span></span>
+    <span style="font-size:10px;color:#3a5a7a;margin-left:8px">your systems — click a column header to sort high→low</span>
+    <span class="setup-h" style="margin:0 0 0 18px;cursor:pointer" onclick="logOpen=!logOpen;renderLogPanel()">Log <span id="log-arrow">▸</span></span>
+    <span class="setup-h" style="margin:0 0 0 18px;cursor:pointer" onclick="standingsOpen=!standingsOpen;renderStandings()">Standings <span id="standings-arrow">▸</span></span>
+    <div id="ledger-table" style="display:none;margin-top:6px;max-height:200px;overflow:auto"></div>
+    <div id="standings-panel" style="display:none;margin-top:6px"></div>
+    <div id="log-panel" style="display:none;margin-top:6px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;align-items:center">
+        <button onclick="downloadLog()" style="font-size:10px">Download log .txt</button>
+        <select id="snap-select" style="font-size:10px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#c8d8f0;padding:2px 4px"></select>
+        <button onclick="downloadSnapshot()" style="font-size:10px" title="Download the full game state as it was at the end of that turn — loadable via Load file">Download turn .json</button>
+        <button onclick="downloadBattleCards()" style="font-size:10px" title="Text summary of every contested system, ready to set up in NEBULOUS">Battle cards .txt</button>
+      </div>
+      <div id="log-lines" style="max-height:150px;overflow:auto;font-family:'Courier New',monospace;font-size:10px;color:#9ab0c8"></div>
+    </div>
   </div>
 
   <div id="fleet-bar">
@@ -395,9 +433,88 @@ let shipRoster=[]; // {hull, name, points, missilePoints, missileQty} designs im
 let buildingTypes=[
   {id:'bt_shipyard',name:'Shipyard',metals:50,explosives:20,prodBonus:0,shipyard:true,maxPerSystem:0,costScale:1.1,pointOutput:10},
   {id:'bt_refinery',name:'Refinery',metals:40,explosives:10,prodBonus:25,shipyard:false,maxPerSystem:0,costScale:1.1,pointOutput:0},
+  {id:'bt_hypergate',name:'Hypergate',metals:60,explosives:15,prodBonus:0,shipyard:false,hypergate:true,maxPerSystem:1,costScale:1,pointOutput:0},
 ];
 let buildingIdCounter=0;
 let laneMin=1, laneMax=4;
+// ---- fleet movement (AP) ----
+let fleetAPMax=6; // AP per fleet per turn (configurable in Setup)
+// ---- perspective lock: per-player passwords ----
+let playerPasswords={}; // pid -> hash; set when a player card is first claimed (live rooms)
+let myLockedPlayer=null; // this client's claimed player (local only, never synced)
+// ---- fog of war ----
+let fogOfWar=true;
+function computeFogSet(pid){
+  const vis=new Set();
+  if(!galaxyData)return vis;
+  const S=galaxyData.systems;
+  const idxById={};S.forEach((s,i)=>idxById[s.id]=i);
+  const adj={};S.forEach((s,i)=>adj[i]=[]);
+  galaxyData.lanes.forEach(([a,b])=>{adj[a].push(b);adj[b].push(a)});
+  const seeds=new Set();
+  S.forEach((s,i)=>{ if(s.owner===pid||(s.owner!=='neutral'&&getRelation(pid,s.owner)==='treaty'))seeds.add(i); });
+  ships.forEach(f=>{ if(f.owner===pid&&idxById[f.anchor]!=null)seeds.add(idxById[f.anchor]); });
+  seeds.forEach(i=>{ vis.add(S[i].id); adj[i].forEach(j=>vis.add(S[j].id)); });
+  return vis;
+}
+// ---- region labels ----
+let regionLabels=[]; // {x,y,name}
+let placingRegion=false;
+// ---- game log & turn snapshots ----
+let gameLog=[]; // {turn,msg}
+let turnSnapshots=[]; // {turn,json} memory-only; download via the Log panel
+let logOpen=false;
+function logEvent(msg){gameLog.push({turn:turnNum,msg});if(gameLog.length>300)gameLog=gameLog.slice(-300);try{renderLogPanel()}catch(e){}}
+// ---- eco: trade routes, development, victory ----
+let tradeRoutes=[]; // {a,b,owner}
+let tradeCfg={metals:5,explosives:2}; // income per route per turn
+let devCfg={turnsPerLevel:5,yieldPctPerLevel:25,maxLevel:5};
+let winSystems=0; // 0 = off
+let winAnnounced=false;
+let standingsOpen=false;
+function systemDevLevel(s){return s.devLevel||1}
+function devMult(s){return 1+(systemDevLevel(s)-1)*(devCfg.yieldPctPerLevel/100)}
+function tradeRouteActive(r){
+  // cut if a fleet hostile to the route owner sits at either endpoint
+  return !ships.some(f=>(f.anchor===r.a||f.anchor===r.b)&&f.owner!==r.owner&&getRelation(r.owner,f.owner)==='war');
+}
+function downloadText(filename,text){
+  const blob=new Blob([text],{type:'text/plain'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+// diplomacy: pairwise relations 'war' | 'peace' | 'treaty' (default war = anyone can enter anyone)
+let diploRelations={}; // key 'p1|p2' (sorted) -> relation
+let diploProposals=[]; // {from,to,type:'peace'|'treaty'}
+function relKey(a,b){return [a,b].sort().join('|')}
+function getRelation(a,b){if(a===b)return 'self';return diploRelations[relKey(a,b)]||'war'}
+function setRelation(a,b,rel){diploRelations[relKey(a,b)]=rel}
+// are two systems connected by a hyperlane?
+function systemsAdjacent(idA,idB){
+  if(!galaxyData||!galaxyData.lanes)return false;
+  const ia=galaxyData.systems.findIndex(s=>s.id===idA);
+  const ib=galaxyData.systems.findIndex(s=>s.id===idB);
+  if(ia<0||ib<0)return false;
+  return galaxyData.lanes.some(([a,b])=>(a===ia&&b===ib)||(a===ib&&b===ia));
+}
+function systemHasHypergate(s){
+  if(!s||!s.buildings)return false;
+  return s.buildings.some(b=>{const bt=buildingTypes.find(t=>t.id===b.typeId);return bt&&bt.hypergate});
+}
+// movement cost for `owner`'s fleet jumping FROM sysFrom TO sysTo. Returns {cost} or {blocked:reason}
+function jumpCost(owner,sysFrom,sysTo){
+  const destOwner=sysTo.owner;
+  // peace blocks entering their territory entirely
+  if(destOwner!=='neutral'&&destOwner!==owner&&getRelation(owner,destOwner)==='peace'){
+    return {blocked:'You are at PEACE with '+pName(destOwner)+' — your fleets cannot enter their territory.'};
+  }
+  const friendly=(o)=>o===owner||(o!=='neutral'&&getRelation(owner,o)==='treaty');
+  const ownedRate=friendly(destOwner);
+  let cost=ownedRate?3:6;
+  // hypergate: -1 only when BOTH ends of the lane have a gate, on friendly territory
+  if(ownedRate&&friendly(sysFrom.owner)&&systemHasHypergate(sysFrom)&&systemHasHypergate(sysTo))cost-=1;
+  return {cost};
+}
 // flavor map names assigned to systems (shown on hover); editable via .txt upload
 let mapNames=['Silent Citadel','Small Testing Range','The Belt','The Cliff','Tombstones','Tumbleweed','Yukon',
   'Bloodmoon Eclipsed','Earth','Mars',"Nyx's Eye",'Pillars','Abyssal','Arroyo','Avora','Caltrop','Canyon','Cicada',
@@ -409,6 +526,21 @@ let mapNames=['Silent Citadel','Small Testing Range','The Belt','The Cliff','Tom
 function assignMapNames(){
   if(!galaxyData||!galaxyData.systems||!mapNames.length)return;
   galaxyData.systems.forEach(s=>{ s.mapName=mapNames[Math.floor(rng()*mapNames.length)]; });
+}
+function startRegionLabel(){
+  if(mpRoom&&!isGM){alert('Only the host (GM) can name regions in a live game.');return}
+  if(!galaxyData){alert('Generate a galaxy first.');return}
+  placingRegion=true;
+  document.getElementById('map').style.cursor='crosshair';
+  const note=document.getElementById('autosave-note');if(note)note.textContent='Click the map to place the region label…';
+}
+function editRegionLabel(i){
+  if(mpRoom&&!isGM){alert('Only the host (GM) can edit region labels in a live game.');return}
+  const rl=regionLabels[i];if(!rl)return;
+  const v=prompt('Rename region (leave empty to DELETE):',rl.name);
+  if(v===null)return;
+  if(v.trim()==='')regionLabels.splice(i,1); else rl.name=v.trim();
+  renderMap(galaxyData);autoSave();
 }
 function rerollMapNames(){
   if(!galaxyData){alert('Generate a galaxy first.');return}
@@ -713,6 +845,8 @@ function generate(opts){
   assignMapNames();
   if(!opts.keepState){
     ships=[];
+    tradeRoutes=[];
+    winAnnounced=false;
     turnNum=1;
     activePlayer='p1';
     initPlayerState(nPlayers,true);
@@ -751,6 +885,7 @@ function claimCapital(sysId){
   if(sys.owner!=='neutral'){alert('That system is already claimed. Pick an unclaimed one.');return}
   sys.owner=pid;
   sys.buildings=sys.buildings||[];
+  logEvent(pName(pid)+' claimed '+sys.name+' as their capital');
   // capitals start with a shipyard
   sys.buildings.push({id:'b'+(buildingIdCounter++),typeId:(buildingTypes.find(t=>t.shipyard)||{}).id});
   sys.points=systemPointOutput(sys); // seed one turn of build points so turn 1 isn't empty
@@ -843,17 +978,64 @@ function renderMap({systems,lanes}){
   const laneG=document.getElementById('lanes-layer'),sysG=document.getElementById('sys-layer');
   laneG.innerHTML='';sysG.innerHTML='';
 
+  const fogLanes=(playerView&&fogOfWar&&!capitalPhase)?computeFogSet(activePlayer):null;
   lanes.forEach(([a,b])=>{
     const sa=systems[a],sb=systems[b];
+    if(fogLanes&&!fogLanes.has(sa.id)&&!fogLanes.has(sb.id))return; // both ends unknown
     const l=document.createElementNS(ns,'line');
     l.setAttribute('x1',sa.x);l.setAttribute('y1',sa.y);l.setAttribute('x2',sb.x);l.setAttribute('y2',sb.y);
     l.setAttribute('stroke','rgba(80,130,220,0.22)');l.setAttribute('stroke-width','4');l.setAttribute('stroke-dasharray','18 30');
     laneG.appendChild(l);
+    // hypergate icons: a small diamond near each end whose system has a hypergate
+    [[sa,sb],[sb,sa]].forEach(([from,to])=>{
+      if(fogLanes&&!fogLanes.has(from.id))return;
+      if(!systemHasHypergate(from))return;
+      const t=0.16; // fraction along the lane from the gate system
+      const gx=from.x+(to.x-from.x)*t, gy=from.y+(to.y-from.y)*t;
+      const d=document.createElementNS(ns,'path');
+      const sz=14;
+      d.setAttribute('d',`M ${gx} ${gy-sz} L ${gx+sz} ${gy} L ${gx} ${gy+sz} L ${gx-sz} ${gy} Z`);
+      d.setAttribute('fill','rgba(140,220,255,0.85)');
+      d.setAttribute('stroke','#0a1220');d.setAttribute('stroke-width','2');
+      laneG.appendChild(d);
+    });
   });
 
+  // trade routes (gold = active, red = cut by hostile fleets)
+  tradeRoutes.forEach(r=>{
+    const sa=systems.find(s=>s.id===r.a),sb=systems.find(s=>s.id===r.b);
+    if(!sa||!sb)return;
+    if(fogLanes&&!fogLanes.has(sa.id)&&!fogLanes.has(sb.id))return;
+    const act=tradeRouteActive(r);
+    const l=document.createElementNS(ns,'line');
+    l.setAttribute('x1',sa.x);l.setAttribute('y1',sa.y);l.setAttribute('x2',sb.x);l.setAttribute('y2',sb.y);
+    l.setAttribute('stroke',act?'rgba(255,210,120,0.6)':'rgba(220,90,90,0.55)');
+    l.setAttribute('stroke-width','7');l.setAttribute('stroke-dasharray','6 10');
+    laneG.appendChild(l);
+  });
+  // region labels (large faint sector names)
+  regionLabels.forEach((rl,i)=>{
+    const t=document.createElementNS(ns,'text');
+    t.setAttribute('x',rl.x);t.setAttribute('y',rl.y);t.setAttribute('text-anchor','middle');
+    t.setAttribute('fill','rgba(150,180,230,0.16)');t.setAttribute('font-size','110');
+    t.setAttribute('font-family','Courier New,monospace');t.setAttribute('font-weight','bold');t.setAttribute('letter-spacing','14');
+    t.style.cursor='pointer';
+    t.textContent=rl.name;
+    t.addEventListener('click',ev=>{ev.stopPropagation();editRegionLabel(i)});
+    laneG.appendChild(t);
+  });
+  const fog=(playerView&&fogOfWar&&!capitalPhase)?computeFogSet(activePlayer):null;
   const maxRes=Math.max(...systems.map(s=>s.resources.metals+s.resources.explosives));
 
   systems.forEach(sys=>{
+    if(fog&&!fog.has(sys.id)){
+      const g0=document.createElementNS(ns,'g');
+      const dot=document.createElementNS(ns,'circle');
+      dot.setAttribute('cx',sys.x);dot.setAttribute('cy',sys.y);dot.setAttribute('r',9);
+      dot.setAttribute('fill','rgba(130,150,180,0.25)');
+      g0.appendChild(dot);sysG.appendChild(g0);
+      return;
+    }
     const color=sys.owner==='neutral'?'#aabbcc':pColor(sys.owner);
     const isSpecial=(sys.type==='pulsar'||sys.type==='anomaly');
     const specColor=sys.type==='pulsar'?'#cc66ff':sys.type==='anomaly'?'#e0a060':null;
@@ -903,6 +1085,14 @@ function renderMap({systems,lanes}){
     g.addEventListener('mousemove',moveTip);
     g.addEventListener('mouseleave',hideTip);
     if(capitalPhase)g.addEventListener('click',ev=>{ev.stopPropagation();claimCapital(sys.id)});
+    else g.addEventListener('click',ev=>{ev.stopPropagation();toggleSelectSystem(sys,ev.shiftKey)});
+    if(selectedSystems.has(sys.id)){
+      const selRing=document.createElementNS(ns,'circle');
+      selRing.setAttribute('cx',sys.x);selRing.setAttribute('cy',sys.y);selRing.setAttribute('r',r+14);
+      selRing.setAttribute('fill','none');selRing.setAttribute('stroke','#ffd27a');
+      selRing.setAttribute('stroke-width','3');selRing.setAttribute('stroke-dasharray','8 6');
+      g.appendChild(selRing);
+    }
     sysG.appendChild(g);
   });
 
@@ -913,6 +1103,7 @@ function showTip(e,sys){
   const tip=document.getElementById('tooltip');
   let html=`<div class="tname">${sys.name}</div>`;
   if(sys.mapName)html+=`<div style="font-size:10px;color:#9ad4ff;margin:-2px 0 4px">${sys.mapName}</div>`;
+  if(sys.owner!=='neutral')html+=`<div class="trow"><span>Development</span><span class="tv">Lv ${systemDevLevel(sys)}${systemDevLevel(sys)<devCfg.maxLevel?' ('+(sys.devProg||0)+'/'+devCfg.turnsPerLevel+')':' (max)'}</span></div>`;
   html+=`<div class="trow"><span>Owner</span><span class="tv">${sys.owner==='neutral'?'Neutral':pName(sys.owner)}</span></div>`;
   if(playerView||capitalPhase){
     html+=`<div class="trow"><span>Type</span><span class="tv">Unsurveyed</span></div>`;
@@ -1200,8 +1391,10 @@ function placeFleet(){
   const f={id,name,owner,
            shipsList:builderShips.map(s=>({hull:s.hull,name:s.name,points:s.points,missilePoints:s.missilePoints,missileQty:s.missileQty})),
            anchor:sys.id,anchorAngle:-Math.PI/2,x:sys.x,y:sys.y,
+           ap:fleetAPMax, turnStart:{anchor:sys.id,anchorAngle:-Math.PI/2,ap:fleetAPMax},
            resCost:{metals:cost.metalsTotal,explosives:cost.explosivesTotal}};
   ships.push(f);
+  logEvent(pName(owner)+' deployed "'+name+'" ('+fleetPoints(f)+' pts) at '+sys.name);
   const p=edgeAnchorPos(sys,f);
   f.x=p.x;f.y=p.y;
   nameEl.value='';
@@ -1285,6 +1478,8 @@ function showFleetDetail(f){
   html+=`<span style="color:${pColor(f.owner)};font-weight:bold">Edit fleet:</span>`;
   html+=`<input type="text" value="${(f.name||'').replace(/"/g,'&quot;')}" style="width:170px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px;font-family:'Courier New',monospace;font-weight:bold" onchange="renameFleet('${f.id}',this.value)">`;
   html+=`<span style="color:#8bc0ff">${fleetPoints(f)} pts · ${f.shipsList.length} ships · ${fleetStars(f)}★</span>`;
+  html+=`<span style="color:#9ae0c0">AP ${typeof f.ap==='number'?f.ap:fleetAPMax}/${fleetAPMax}</span>`;
+  html+=`<button onclick="revertFleetMove('${f.id}')" title="Undo this turn's movement (restores position and AP)" style="font-size:10px;padding:3px 8px">Revert move</button>`;
   html+=`<span style="font-size:11px;color:#5a7a9a">cost <span style="color:#c0783a">${cost.metalsTotal}M</span>/<span style="color:#7a3a8a">${cost.explosivesTotal}E</span></span>`;
   {const u=fleetUpkeep(f); if(u.metals||u.explosives) html+=`<span style="color:#c08a5a">upkeep ${u.metals}M/${u.explosives}E/turn</span>`;}
   html+=`<span style="color:#5a7a9a">@ ${anchorName(f.anchor)}${atYard?' (shipyard)':''}</span>`;
@@ -1298,8 +1493,14 @@ function showFleetDetail(f){
   if(!f.shipsList.length)html+=`<span style="font-size:11px;color:#3a5a7a">no ships</span>`;
   f.shipsList.forEach((s,idx)=>{
     const c=computeShipCost(s.points,s.missilePoints);
-    html+=`<div style="font-size:11px;color:#c0d4f0;display:flex;justify-content:space-between;gap:8px"><span>${s.hull} (${s.points})</span><span style="color:#7a9ab8">${c.metals}M/${c.explosives}E <span style="color:#c06060;cursor:pointer" onclick="removeShipFromFleet('${f.id}',${idx})" title="remove (refund only at shipyard)">✕</span></span></div>`;
+    html+=`<div style="font-size:11px;color:#c0d4f0;display:flex;justify-content:space-between;gap:8px"><span><input type="checkbox" class="splitck" data-idx="${idx}" style="margin-right:4px">${s.hull} (${s.points})</span><span style="color:#7a9ab8">${c.metals}M/${c.explosives}E <span style="color:#c06060;cursor:pointer" onclick="removeShipFromFleet('${f.id}',${idx})" title="remove (refund only at shipyard)">✕</span></span></div>`;
   });
+  html+=`<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">`;
+  html+=`<button onclick="splitFleet('${f.id}')" style="font-size:10px;padding:2px 7px" title="Move checked ships into a new fleet at this system">Split checked → new fleet</button>`;
+  ships.filter(o=>o.id!==f.id&&o.owner===f.owner&&o.anchor===f.anchor&&o.shipsList).forEach(o=>{
+    html+=`<button onclick="mergeFleets('${f.id}','${o.id}')" style="font-size:10px;padding:2px 7px">Merge into ${o.name}</button>`;
+  });
+  html+=`</div>`;
   html+=`</div></div>`;
   // add from roster (only at shipyard)
   html+=`<div style="flex:1;min-width:240px"><div style="font-size:10px;color:#5a7a9a;margin-bottom:3px">ADD FROM ROSTER ${atYard?'':'(move to a shipyard to add)'}</div><div style="display:flex;flex-direction:column;gap:2px;max-height:140px;overflow:auto">`;
@@ -1329,6 +1530,17 @@ function renameFleet(id,val){
 function fleetAtShipyard(f){
   const sys=galaxyData&&galaxyData.systems.find(s=>s.id===f.anchor);
   return sys&&systemHasShipyard(sys)&&sys.owner===f.owner;
+}
+// undo this turn's movement: restore anchor/angle/AP from the turn-start snapshot
+function revertFleetMove(id){
+  if(!mpCanAct())return;
+  const f=ships.find(s=>s.id===id);if(!f)return;
+  if(!canMoveFleet(f)){alert('You can only revert your own fleets.');return}
+  const ts=f.turnStart||{anchor:f.anchor,anchorAngle:f.anchorAngle,ap:fleetAPMax};
+  f.anchor=ts.anchor; f.anchorAngle=ts.anchorAngle; f.ap=(typeof ts.ap==='number')?ts.ap:fleetAPMax;
+  const sys=galaxyData.systems.find(s=>s.id===f.anchor);
+  if(sys){const p=edgeAnchorPos(sys,f);f.x=p.x;f.y=p.y;}
+  renderShips();renderTokenList();showFleetDetail(f);autoSave();
 }
 // add a roster design to an existing fleet (costs resources + build points, shipyard only)
 function addShipToFleet(id,rosterIdx){
@@ -1377,9 +1589,49 @@ function disbandFleet(id,refund){
   } else {
     if(!confirm('Disband "'+f.name+'" with NO refund?'))return;
   }
+  logEvent(pName(f.owner)+' disbanded "'+f.name+'"');
   removeShip(id);
   document.getElementById('fleet-detail').style.display='none';
   renderGameBar();
+}
+// merge fleet src into dst (same owner & system); AP becomes the lower of the two
+function mergeFleets(srcId,dstId){
+  if(!mpCanAct())return;
+  const src=ships.find(s=>s.id===srcId),dst=ships.find(s=>s.id===dstId);
+  if(!src||!dst)return;
+  if(!canMoveFleet(src)||!canMoveFleet(dst)){alert('You can only merge your own fleets.');return}
+  if(src.owner!==dst.owner||src.anchor!==dst.anchor){alert('Fleets must belong to the same player and be at the same system.');return}
+  if(!src.shipsList||!dst.shipsList){alert('Only ship-list fleets can be merged.');return}
+  dst.shipsList.push(...src.shipsList);
+  dst.ap=Math.min(typeof dst.ap==='number'?dst.ap:fleetAPMax, typeof src.ap==='number'?src.ap:fleetAPMax);
+  recalcFleetCost(dst);
+  ships=ships.filter(s=>s.id!==srcId);
+  logEvent(pName(dst.owner)+' merged "'+src.name+'" into "'+dst.name+'"');
+  renderShips();renderTokenList();renderGameBar();showFleetDetail(dst);autoSave();
+}
+// split checked ships out of fleet id into a new fleet at the same system
+function splitFleet(id){
+  if(!mpCanAct())return;
+  const f=ships.find(s=>s.id===id);if(!f||!f.shipsList)return;
+  if(!canMoveFleet(f)){alert('You can only split your own fleets.');return}
+  const checked=[...document.querySelectorAll('#fleet-detail .splitck:checked')].map(c=>parseInt(c.dataset.idx));
+  if(!checked.length){alert('Tick the ships you want to split off first.');return}
+  if(checked.length>=f.shipsList.length){alert('You cannot split off ALL ships — leave at least one in the original fleet.');return}
+  const moved=[],kept=[];
+  f.shipsList.forEach((s,i)=>{(checked.includes(i)?moved:kept).push(s)});
+  f.shipsList=kept;recalcFleetCost(f);
+  const nid='fleet'+(shipIdCounter++);
+  const nf={id:nid,name:f.name+' B',owner:f.owner,shipsList:moved,
+            anchor:f.anchor,anchorAngle:(f.anchorAngle||0)+0.6,x:f.x,y:f.y,
+            ap:typeof f.ap==='number'?f.ap:fleetAPMax,
+            turnStart:{anchor:f.anchor,anchorAngle:(f.anchorAngle||0)+0.6,ap:typeof f.ap==='number'?f.ap:fleetAPMax},
+            resCost:{metals:0,explosives:0}};
+  recalcFleetCost(nf);
+  ships.push(nf);
+  const sys=galaxyData.systems.find(s=>s.id===nf.anchor);
+  if(sys){const p=edgeAnchorPos(sys,nf);nf.x=p.x;nf.y=p.y;}
+  logEvent(pName(f.owner)+' split "'+nf.name+'" off from "'+f.name+'"');
+  renderShips();renderTokenList();renderGameBar();showFleetDetail(f);autoSave();
 }
 // recompute a fleet's stored resCost from its ships
 function recalcFleetCost(f){
@@ -1405,11 +1657,12 @@ function playerIncome(pid){
   let m=0,e=0;
   if(galaxyData)galaxyData.systems.forEach(s=>{
     if(s.owner===pid){
-      const mult=1+systemProdBonus(s)/100;
+      const mult=(1+systemProdBonus(s)/100)*devMult(s);
       m+=Math.round(s.resources.metals*mult);
       e+=Math.round(s.resources.explosives*mult);
     }
   });
+  tradeRoutes.forEach(r=>{ if(r.owner===pid&&tradeRouteActive(r)){m+=tradeCfg.metals;e+=tradeCfg.explosives;} });
   return{m,e};
 }
 
@@ -1420,9 +1673,10 @@ function renderGameBar(){
   const tabs=document.getElementById('player-tabs');tabs.innerHTML='';
   for(let i=1;i<=n;i++){
     const pid='p'+i;
+    if(mpRoom&&!isGM&&myLockedPlayer&&pid!==myLockedPlayer)continue; // locked: other cards hidden
     const tab=document.createElement('div');
     tab.className='ptab'+(pid===activePlayer?' active':'');
-    tab.onclick=()=>switchPlayer(pid);
+    tab.onclick=()=>tryClaimOrSwitch(pid);
     tab.innerHTML=`<span class="pd" style="background:${pColor(pid)}"></span>${pName(pid)}${playerState[pid]&&playerState[pid].ended?' <span class="done">✓</span>':''}`;
     tabs.appendChild(tab);
   }
@@ -1466,11 +1720,40 @@ function renderGameBar(){
   populateSpawnSelect();
   refreshTemplateSelect();
   renderRoster();
+  renderLedger();
+  renderStandings();
   populateDiploSelects();
   populateBuildSelects();
 }
 
-function switchPlayer(pid){activePlayer=pid;builderShips=[];composition=[];const nm=document.getElementById('ship-name');if(nm)nm.value='';renderShips();renderGameBar();renderComposition();updateCapitalPhaseUI();refreshTemplateSelect()}
+function tryClaimOrSwitch(pid){
+  if(!mpRoom||isGM){switchPlayer(pid);return}
+  if(!canAct){alert('Spectators cannot play a faction.');return}
+  if(myLockedPlayer){
+    if(pid!==myLockedPlayer){alert('You are locked to '+pName(myLockedPlayer)+'.');return}
+    switchPlayer(pid);return;
+  }
+  const stored=playerPasswords[pid];
+  if(!stored){
+    const pw=prompt('Set a password for '+pName(pid)+'.\nThis claims the faction and locks this screen to it:');
+    if(!pw)return;
+    playerPasswords[pid]=mpHash(pw);
+    myLockedPlayer=pid;
+    const jp=document.getElementById('mp-joinpass'); if(jp)jp.value=pw;
+    logEvent(pName(pid)+' was claimed by a player');
+    switchPlayer(pid);autoSave();
+  } else {
+    const pw=prompt('Enter the password for '+pName(pid)+':');
+    if(pw===null)return;
+    if(mpHash(pw)!==stored){alert('Wrong password for '+pName(pid)+'.');return}
+    myLockedPlayer=pid;
+    const jp=document.getElementById('mp-joinpass'); if(jp)jp.value=pw;
+    switchPlayer(pid);
+  }
+}
+function switchPlayer(pid){
+  if(mpRoom&&!isGM&&myLockedPlayer&&pid!==myLockedPlayer)return; // hard lock
+  activePlayer=pid;builderShips=[];composition=[];const nm=document.getElementById('ship-name');if(nm)nm.value='';renderShips();renderGameBar();renderComposition();updateCapitalPhaseUI();refreshTemplateSelect()}
 
 function canEditResources(){
   if(!mpRoom)return true;  // solo / hotseat
@@ -1504,6 +1787,13 @@ function resolveOwnership(){
     if(!here.length)return;
     const owners=[...new Set(here.map(f=>f.owner))];
     if(owners.length===1){
+      if(sys.owner!==owners[0]){
+        if(sys.owner!=='neutral')logEvent(pName(owners[0])+' captured '+sys.name+' from '+pName(sys.owner));
+        else logEvent(pName(owners[0])+' took control of '+sys.name);
+        sys.devLevel=1;sys.devProg=0; // capture resets development
+        // routes touching a captured system collapse
+        tradeRoutes=tradeRoutes.filter(r=>r.a!==sys.id&&r.b!==sys.id);
+      }
       sys.owner=owners[0];
     }
     // contested (2+ owners): ownership unchanged
@@ -1511,6 +1801,7 @@ function resolveOwnership(){
 }
 
 function advanceTurn(){
+  try{turnSnapshots.push({turn:turnNum,json:JSON.stringify(gatherState())});if(turnSnapshots.length>15)turnSnapshots.shift();}catch(e){}
   resolveOwnership();
   Object.keys(playerState).forEach(pid=>{
     const inc=playerIncome(pid);
@@ -1520,6 +1811,11 @@ function advanceTurn(){
     playerState[pid].ended=false;
   });
   turnNum++;
+  // reset fleet AP and record turn-start positions (for the Revert button)
+  ships.forEach(f=>{
+    f.ap=fleetAPMax;
+    f.turnStart={anchor:f.anchor,anchorAngle:f.anchorAngle,ap:fleetAPMax};
+  });
   // accumulate local build points at each system from its shipyards
   if(galaxyData&&galaxyData.systems){
     galaxyData.systems.forEach(s=>{
@@ -1532,6 +1828,26 @@ function advanceTurn(){
       }
     });
   }
+  // development growth on owned systems
+  if(galaxyData)galaxyData.systems.forEach(s=>{
+    if(s.owner==='neutral')return;
+    s.devProg=(s.devProg||0)+1;
+    if(systemDevLevel(s)<devCfg.maxLevel&&s.devProg>=devCfg.turnsPerLevel){
+      s.devLevel=systemDevLevel(s)+1;s.devProg=0;
+    }
+  });
+  // victory check
+  if(winSystems>0&&!winAnnounced&&galaxyData){
+    Object.keys(playerState).forEach(pid=>{
+      const cnt=galaxyData.systems.filter(s=>s.owner===pid).length;
+      if(cnt>=winSystems&&!winAnnounced){
+        winAnnounced=true;
+        logEvent('🏆 '+pName(pid)+' controls '+cnt+' systems and WINS the game!');
+        setTimeout(()=>alert(pName(pid)+' controls '+cnt+' systems and WINS the game!'),50);
+      }
+    });
+  }
+  logEvent('— Turn '+turnNum+' begins —');
   renderMap(galaxyData);renderStats(galaxyData);renderShips();
   renderGameBar();
   const note=document.getElementById('autosave-note');
@@ -1561,7 +1877,7 @@ function gatherState(){
     },
     galaxy:galaxyData?{systems:galaxyData.systems,lanes:galaxyData.lanes,nPlayers:galaxyData.nPlayers,placedCount:galaxyData.placedCount,reqCount:galaxyData.reqCount,reqSpacing:galaxyData.reqSpacing,usedSpacing:galaxyData.usedSpacing}:null,
     ships,shipIdCounter,activePlayer,turnNum,playerState,capitalPhase,capitals,
-    config:{CLASS_POINTS,POINTS_PER_STAR,CLASS_BUILD_COST,extraShipyardPct,pointStoragePct,prodCfg,playerProfiles,fleetTemplates,shipRoster,mapNames,laneMin,laneMax,buildingTypes,buildingIdCounter}
+    config:{CLASS_POINTS,POINTS_PER_STAR,CLASS_BUILD_COST,extraShipyardPct,pointStoragePct,prodCfg,fleetAPMax,diploRelations,diploProposals,fogOfWar,regionLabels,gameLog,playerPasswords,tradeRoutes,tradeCfg,devCfg,winSystems,playerProfiles,fleetTemplates,shipRoster,mapNames,laneMin,laneMax,buildingTypes,buildingIdCounter}
   };
 }
 function applyState(st){
@@ -1595,7 +1911,24 @@ function applyState(st){
     if(st.config.fleetTemplates)fleetTemplates=st.config.fleetTemplates;
     if(st.config.shipRoster)shipRoster=st.config.shipRoster;
     if(st.config.mapNames&&st.config.mapNames.length)mapNames=st.config.mapNames;
-    if(st.config.buildingTypes)buildingTypes=st.config.buildingTypes;
+    if(typeof st.config.fleetAPMax==='number')fleetAPMax=st.config.fleetAPMax;
+    if(st.config.diploRelations)diploRelations=st.config.diploRelations;
+    if(st.config.diploProposals)diploProposals=st.config.diploProposals;
+    if(typeof st.config.fogOfWar==='boolean')fogOfWar=st.config.fogOfWar;
+    if(st.config.regionLabels)regionLabels=st.config.regionLabels;
+    if(st.config.gameLog)gameLog=st.config.gameLog;
+    if(st.config.playerPasswords)playerPasswords=st.config.playerPasswords;
+    if(st.config.tradeRoutes)tradeRoutes=st.config.tradeRoutes;
+    if(st.config.tradeCfg)tradeCfg=Object.assign(tradeCfg,st.config.tradeCfg);
+    if(st.config.devCfg)devCfg=Object.assign(devCfg,st.config.devCfg);
+    if(typeof st.config.winSystems==='number')winSystems=st.config.winSystems;
+    if(st.config.buildingTypes){
+      buildingTypes=st.config.buildingTypes;
+      // backfill: saves from before the Hypergate existed don't have it — add it so it's buildable
+      if(!buildingTypes.some(t=>t.hypergate)){
+        buildingTypes.push({id:'bt_hypergate',name:'Hypergate',metals:60,explosives:15,prodBonus:0,shipyard:false,hypergate:true,maxPerSystem:1,costScale:1,pointOutput:0});
+      }
+    }
     if(typeof st.config.buildingIdCounter==='number')buildingIdCounter=st.config.buildingIdCounter;
     if(typeof st.config.laneMin==='number')laneMin=st.config.laneMin;
     if(typeof st.config.laneMax==='number')laneMax=st.config.laneMax;
@@ -1825,27 +2158,25 @@ function renderSetupPanel(){
   setv('cfg-msexpdiv',prodCfg.missileExpDiv);
   setv('cfg-ptsperstar',prodCfg.ptsPerStar);
   setv('cfg-fppbp',prodCfg.fleetPtsPerBuildPt);
+  setv('cfg-fleetap',fleetAPMax);
+  const fogEl=document.getElementById('cfg-fog');if(fogEl)fogEl.checked=fogOfWar;
+  setv('cfg-trm',tradeCfg.metals);setv('cfg-tre',tradeCfg.explosives);
+  setv('cfg-devturns',devCfg.turnsPerLevel);setv('cfg-devpct',devCfg.yieldPctPerLevel);
+  setv('cfg-winsys',winSystems);
   const exEl=document.getElementById('cfg-extrayard');if(exEl)exEl.value=extraShipyardPct;
   const pcEl=document.getElementById('cfg-ptcap');if(pcEl)pcEl.value=pointStoragePct;
   renderBuildingTypesEditor();
   populateDiploSelects();
 }
 function populateDiploSelects(){
-  const ds=document.getElementById('diplo-system');if(!ds)return;
-  const ownerLbl=document.getElementById('diplo-owner');if(ownerLbl){ownerLbl.textContent=pName(activePlayer)+"'s";ownerLbl.style.color=pColor(activePlayer)}
+  const dt=document.getElementById('diplo-target');if(!dt)return;
   const n=galaxyData?galaxyData.nPlayers:parseInt(document.getElementById('p-players').value);
-  const prevS=ds.value;
-  ds.innerHTML='';
-  const owned=galaxyData?galaxyData.systems.filter(s=>s.owner===activePlayer):[];
-  if(!owned.length){
-    const o=document.createElement('option');o.value='';o.textContent='(you own no systems)';ds.appendChild(o);
-  } else {
-    owned.forEach(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.name;ds.appendChild(o)});
-    if([...ds.options].some(o=>o.value===prevS))ds.value=prevS;
-  }
-  const dt=document.getElementById('diplo-target');dt.innerHTML='';
+  const prev=dt.value;
+  dt.innerHTML='';
   const optN=document.createElement('option');optN.value='neutral';optN.textContent='Neutral';dt.appendChild(optN);
   for(let i=1;i<=n;i++){const pid='p'+i;if(pid===activePlayer)continue;const o=document.createElement('option');o.value=pid;o.textContent=pName(pid);dt.appendChild(o)}
+  if([...dt.options].some(o=>o.value===prev))dt.value=prev;
+  renderDiploBar();
 }
 function setProfileColor(pid,v){playerProfiles[pid].color=v;renderMap(galaxyData);renderShips();renderGameBar();autoSave()}
 function setProfileName(pid,v){playerProfiles[pid].name=v||('Player '+pid.slice(1));renderGameBar();renderSetupPanel();autoSave()}
@@ -1854,6 +2185,10 @@ function setClassBuildCost(cls,v){CLASS_BUILD_COST[cls]=Math.max(0,parseInt(v)||
 function setExtraYard(v){extraShipyardPct=Math.max(0,parseInt(v)||0);renderGameBar();autoSave()}
 function setPointCap(v){pointStoragePct=Math.max(0,parseInt(v)||0);renderGameBar();autoSave()}
 function setPerStar(v){POINTS_PER_STAR=Math.max(1,parseInt(v)||1);renderShips();autoSave()}
+function setFleetAP(v){fleetAPMax=Math.max(1,parseInt(v)||6);renderGameBar();autoSave()}
+function setTradeCfg(f,v){tradeCfg[f]=Math.max(0,parseInt(v)||0);renderGameBar();autoSave()}
+function setDevCfg(f,v){devCfg[f]=Math.max(f==='turnsPerLevel'?1:0,parseInt(v)||0);renderGameBar();autoSave()}
+function setWinSystems(v){winSystems=Math.max(0,parseInt(v)||0);winAnnounced=false;renderStandings();autoSave()}
 function setProdCfg(field,v){
   const num=parseFloat(v)||0;
   if(field==='missilePtValue')prodCfg.missilePtValue=Math.max(0,num);
@@ -1877,6 +2212,7 @@ function renderBuildingTypesEditor(){
       `×<input type="number" min="1" step="0.05" value="${t.costScale!=null?t.costScale:1.1}" title="Cost scaling per existing copy (1 = no scaling, 1.1 = +10% each)" style="width:52px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:2px 4px" onchange="editBuildingType(${i},'costScale',this.value)">`+
       `pts/turn<input type="number" min="0" value="${t.pointOutput||0}" title="Build points produced per turn (shipyards only)" style="width:48px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:2px 4px" onchange="editBuildingType(${i},'pointOutput',this.value)">`+
       `<label style="display:flex;align-items:center;gap:3px">shipyard<input type="checkbox" ${t.shipyard?'checked':''} onchange="editBuildingType(${i},'shipyard',this.checked)"></label>`+
+      `<label style="display:flex;align-items:center;gap:3px">gate<input type="checkbox" ${t.hypergate?'checked':''} title="Hypergate: -1 AP for jumps departing this system on friendly territory" onchange="editBuildingType(${i},'hypergate',this.checked)"></label>`+
       `</div>`;
     el.appendChild(row);
   });
@@ -1885,6 +2221,7 @@ function editBuildingType(i,field,val){
   const t=buildingTypes[i];if(!t)return;
   if(field==='name')t.name=val||'Building';
   else if(field==='shipyard')t.shipyard=!!val;
+  else if(field==='hypergate')t.hypergate=!!val;
   else if(field==='costScale')t.costScale=Math.max(1,parseFloat(val)||1);
   else if(field==='pointOutput')t.pointOutput=Math.max(0,parseInt(val)||0);
   else t[field]=Math.max(0,parseInt(val)||0);
@@ -1899,15 +2236,259 @@ function removeBuildingType(i){
   buildingTypes.splice(i,1);
   renderBuildingTypesEditor();renderGameBar();autoSave();
 }
-function diploTransfer(){
+// ---- Ledger (per-player system table, sortable high→low) ----
+let ledgerOpen=false, ledgerSort='metals';
+function renderLedger(){
+  const arrow=document.getElementById('ledger-arrow');if(arrow)arrow.textContent=ledgerOpen?'▾':'▸';
+  const tbl=document.getElementById('ledger-table');if(!tbl)return;
+  tbl.style.display=ledgerOpen?'block':'none';
+  if(!ledgerOpen)return;
+  if(!galaxyData){tbl.innerHTML='<span style="color:#3a5a7a">generate a galaxy first</span>';return}
+  const rows=galaxyData.systems.filter(s=>s.owner===activePlayer).map(s=>({
+    name:s.name, map:s.mapName||'', lvl:systemDevLevel(s), metals:s.resources.metals, explosives:s.resources.explosives,
+    pts:systemPoints(s), out:systemPointOutput(s),
+    blds:(s.buildings||[]).length
+  }));
+  rows.sort((a,b)=>{
+    const va=a[ledgerSort],vb=b[ledgerSort];
+    if(typeof va==='string'||typeof vb==='string')return String(va).localeCompare(String(vb));
+    return (vb||0)-(va||0);
+  });
+  const cols=[['name','System'],['map','Map'],['lvl','Lv'],['metals','Metals'],['explosives','Explosives'],['pts','Build pts'],['out','Pts/turn'],['blds','Buildings']];
+  let html='<table style="border-collapse:collapse;width:100%;font-family:\'Courier New\',monospace;font-size:11px">';
+  html+='<tr>'+cols.map(([k,l])=>`<th style="text-align:left;padding:2px 10px 2px 0;color:${ledgerSort===k?'#ffd27a':'#5a7a9a'};cursor:pointer;border-bottom:1px solid rgba(80,140,220,0.3)" onclick="ledgerSort='${k}';renderLedger()">${l}${ledgerSort===k?' ↓':''}</th>`).join('')+'</tr>';
+  rows.forEach(r=>{
+    html+='<tr>'+cols.map(([k])=>`<td style="padding:2px 10px 2px 0;color:#c0d4f0">${r[k]}</td>`).join('')+'</tr>';
+  });
+  if(!rows.length)html+='<tr><td colspan="7" style="color:#3a5a7a;padding:4px 0">you own no systems</td></tr>';
+  html+='</table>';
+  tbl.innerHTML=html;
+}
+function sendResources(){
   if(!mpCanAct()){alert("Spectators cannot act.");return}
-  const sid=document.getElementById('diplo-system').value;
   const tgt=document.getElementById('diplo-target').value;
-  if(!sid){alert('The active player owns no system to transfer.');return}
-  const sys=galaxyData.systems.find(s=>s.id===sid);
-  if(!sys||sys.owner!==activePlayer){alert('You can only transfer a system the active player owns.');return}
-  sys.owner=tgt;
-  renderMap(galaxyData);renderStats(galaxyData);renderShips();renderGameBar();autoSave();
+  if(!tgt||tgt==='neutral'||tgt===activePlayer){alert('Pick a target PLAYER in the Diplomacy bar first.');return}
+  let m=Math.max(0,parseInt(document.getElementById('send-m').value)||0);
+  let e=Math.max(0,parseInt(document.getElementById('send-e').value)||0);
+  if(!m&&!e){alert('Enter how many metals / explosives to send.');return}
+  const ps=playerState[activePlayer],pt=playerState[tgt];
+  if(!ps||!pt)return;
+  m=Math.min(m,ps.metals);e=Math.min(e,ps.explosives);
+  if(!m&&!e){alert('You do not have those resources.');return}
+  if(!confirm('Send '+m+' metals and '+e+' explosives to '+pName(tgt)+'?'))return;
+  ps.metals-=m;ps.explosives-=e;pt.metals+=m;pt.explosives+=e;
+  logEvent(pName(activePlayer)+' sent '+m+'M / '+e+'E to '+pName(tgt));
+  document.getElementById('send-m').value=0;document.getElementById('send-e').value=0;
+  renderGameBar();autoSave();
+}
+function toggleTradeRoute(){
+  if(!mpCanAct()){alert("Spectators cannot act.");return}
+  if(selectedSystems.size!==2){alert('Select exactly TWO systems first (click, then shift-click).');return}
+  const [idA,idB]=[...selectedSystems];
+  const sa=galaxyData.systems.find(s=>s.id===idA),sb=galaxyData.systems.find(s=>s.id===idB);
+  if(!sa||!sb)return;
+  // remove if an own route already links them
+  const existing=tradeRoutes.findIndex(r=>r.owner===activePlayer&&((r.a===idA&&r.b===idB)||(r.a===idB&&r.b===idA)));
+  if(existing>=0){
+    tradeRoutes.splice(existing,1);
+    logEvent(pName(activePlayer)+' dismantled a trade route ('+sa.name+' ↔ '+sb.name+')');
+    selectedSystems.clear();renderMap(galaxyData);renderDiploBar();renderGameBar();autoSave();return;
+  }
+  if(!systemsAdjacent(idA,idB)){alert('Trade routes must follow a single hyperlane — pick two ADJACENT systems.');return}
+  const friendly=o=>o===activePlayer||(o!=='neutral'&&getRelation(activePlayer,o)==='treaty');
+  if(!friendly(sa.owner)||!friendly(sb.owner)){alert('Both ends must be yours (or a treaty ally\'s).');return}
+  if(sa.owner!==activePlayer&&sb.owner!==activePlayer){alert('At least one end must be YOUR system.');return}
+  tradeRoutes.push({a:idA,b:idB,owner:activePlayer});
+  logEvent(pName(activePlayer)+' established a trade route ('+sa.name+' ↔ '+sb.name+', +'+tradeCfg.metals+'M/+'+tradeCfg.explosives+'E per turn)');
+  selectedSystems.clear();renderMap(galaxyData);renderDiploBar();renderGameBar();autoSave();
+}
+function renderStandings(){
+  const arrow=document.getElementById('standings-arrow');if(arrow)arrow.textContent=standingsOpen?'▾':'▸';
+  const panel=document.getElementById('standings-panel');if(!panel)return;
+  panel.style.display=standingsOpen?'block':'none';
+  if(!standingsOpen||!galaxyData)return;
+  const rows=Object.keys(playerState).map(pid=>({
+    pid,name:pName(pid),
+    systems:galaxyData.systems.filter(s=>s.owner===pid).length,
+    fleetPts:ships.filter(f=>f.owner===pid).reduce((a,f)=>a+fleetPoints(f),0),
+    metals:playerState[pid].metals,explosives:playerState[pid].explosives,
+    routes:tradeRoutes.filter(r=>r.owner===pid).length
+  }));
+  rows.sort((a,b)=>b.systems-a.systems);
+  let html='';
+  if(winSystems>0)html+='<div style="color:#ffd27a;font-size:10px;margin-bottom:3px">First to control '+winSystems+' systems wins.</div>';
+  html+='<table style="border-collapse:collapse;font-family:\'Courier New\',monospace;font-size:11px"><tr>'+
+    ['Player','Systems','Fleet pts','Metals','Explosives','Routes'].map(c=>'<th style="text-align:left;padding:2px 14px 2px 0;color:#5a7a9a;border-bottom:1px solid rgba(80,140,220,0.3)">'+c+'</th>').join('')+'</tr>';
+  rows.forEach(r=>{
+    html+='<tr><td style="padding:2px 14px 2px 0;color:'+pColor(r.pid)+';font-weight:bold">'+r.name+'</td>'+
+      [r.systems,r.fleetPts,r.metals,r.explosives,r.routes].map(v=>'<td style="padding:2px 14px 2px 0;color:#c0d4f0">'+v+'</td>').join('')+'</tr>';
+  });
+  html+='</table>';
+  panel.innerHTML=html;
+}
+function renderLogPanel(){
+  const arrow=document.getElementById('log-arrow');if(arrow)arrow.textContent=logOpen?'▾':'▸';
+  const panel=document.getElementById('log-panel');if(!panel)return;
+  panel.style.display=logOpen?'block':'none';
+  if(!logOpen)return;
+  const lines=document.getElementById('log-lines');
+  lines.innerHTML=gameLog.slice().reverse().map(e=>`<div><span style="color:#5a7a9a">[T${e.turn}]</span> ${e.msg}</div>`).join('')||'<span style="color:#3a5a7a">nothing logged yet</span>';
+  const sel=document.getElementById('snap-select');
+  const prev=sel.value;
+  sel.innerHTML=turnSnapshots.length?turnSnapshots.map((s,i)=>`<option value="${i}">end of turn ${s.turn}</option>`).join(''):'<option value="">no snapshots yet</option>';
+  if([...sel.options].some(o=>o.value===prev))sel.value=prev;
+}
+function downloadLog(){
+  const txt=gameLog.map(e=>'[Turn '+e.turn+'] '+e.msg).join('\n')||'(empty log)';
+  downloadText('nebulous4x_log_turn'+turnNum+'.txt',txt);
+}
+function downloadSnapshot(){
+  const sel=document.getElementById('snap-select');
+  const s=turnSnapshots[parseInt(sel.value)];
+  if(!s){alert('No snapshot selected. Snapshots are taken automatically each time the turn advances.');return}
+  downloadText('nebulous4x_turn'+s.turn+'.json',s.json);
+}
+function battleCardsText(){
+  if(!galaxyData)return 'No galaxy.';
+  const lines=[];
+  galaxyData.systems.forEach(s=>{
+    const here=ships.filter(f=>f.anchor===s.id);
+    const owners=[...new Set(here.map(f=>f.owner))];
+    if(owners.length<2)return;
+    let anyWar=false;
+    for(let i=0;i<owners.length;i++)for(let j=i+1;j<owners.length;j++)if(getRelation(owners[i],owners[j])==='war')anyWar=true;
+    if(!anyWar)return;
+    lines.push('=== Battle of '+(s.mapName||s.name)+' ('+s.name+') — Turn '+turnNum+' ===');
+    owners.forEach(o=>{
+      lines.push(pName(o)+' forces:');
+      here.filter(f=>f.owner===o).forEach(f=>{
+        const comp=f.shipsList?(' — '+f.shipsList.map(sh=>sh.hull+' ('+sh.points+')').join(', ')):'';
+        lines.push('  '+f.name+': '+fleetPoints(f)+' pts'+comp);
+      });
+    });
+    lines.push('Suggested NEBULOUS map: '+(s.mapName||'—'));
+    lines.push('');
+  });
+  return lines.length?lines.join('\n'):'No contested systems — no two warring players currently share a system.';
+}
+function downloadBattleCards(){downloadText('nebulous4x_battles_turn'+turnNum+'.txt',battleCardsText());}
+// ---- Diplomacy: relations & proposals ----
+function declareWar(){
+  if(!mpCanAct()){alert("Spectators cannot act.");return}
+  const tgt=document.getElementById('diplo-target').value;
+  if(!tgt||tgt===activePlayer)return;
+  if(getRelation(activePlayer,tgt)==='war'){alert('You are already at war with '+pName(tgt)+'.');return}
+  if(!confirm('Declare WAR on '+pName(tgt)+'? (unilateral, immediate)'))return;
+  setRelation(activePlayer,tgt,'war');
+  logEvent(pName(activePlayer)+' declared WAR on '+pName(tgt));
+  diploProposals=diploProposals.filter(p=>relKey(p.from,p.to)!==relKey(activePlayer,tgt));
+  renderDiploBar();autoSave();
+}
+function proposeDiplo(type){
+  if(!mpCanAct()){alert("Spectators cannot act.");return}
+  const tgt=document.getElementById('diplo-target').value;
+  if(!tgt||tgt===activePlayer)return;
+  if(getRelation(activePlayer,tgt)===type){alert('Already in effect.');return}
+  if(diploProposals.some(p=>p.from===activePlayer&&p.to===tgt&&p.type===type)){alert('Proposal already sent.');return}
+  // if the other side already proposed the same thing, it's mutual: enact immediately
+  const mutual=diploProposals.findIndex(p=>p.from===tgt&&p.to===activePlayer&&p.type===type);
+  if(mutual>=0){diploProposals.splice(mutual,1);setRelation(activePlayer,tgt,type);logEvent(pName(activePlayer)+' and '+pName(tgt)+' agreed to '+(type==='treaty'?'a military treaty':type));renderDiploBar();autoSave();return}
+  diploProposals.push({from:activePlayer,to:tgt,type});
+  renderDiploBar();autoSave();
+}
+function respondDiplo(idx,accept){
+  if(!mpCanAct())return;
+  const p=diploProposals[idx];if(!p||p.to!==activePlayer)return;
+  diploProposals.splice(idx,1);
+  if(accept){setRelation(p.from,p.to,p.type);logEvent(pName(p.from)+' and '+pName(p.to)+' agreed to '+(p.type==='treaty'?'a military treaty':p.type));}
+  renderDiploBar();autoSave();
+}
+function renderDiploBar(){
+  const tgt=document.getElementById('diplo-target');if(!tgt)return;
+  const relEl=document.getElementById('diplo-relation');
+  if(relEl){
+    const t=tgt.value;
+    if(t&&t!==activePlayer){
+      const rel=getRelation(activePlayer,t);
+      const col=rel==='war'?'#e08080':rel==='treaty'?'#8fe0a8':'#9ad4ff';
+      relEl.innerHTML=`<span style="color:${col}">${rel.toUpperCase()}</span>`;
+    } else relEl.textContent='';
+  }
+  const pe=document.getElementById('diplo-proposals');
+  if(pe){
+    pe.innerHTML='';
+    diploProposals.forEach((p,i)=>{
+      if(p.to===activePlayer){
+        const s=document.createElement('span');
+        s.style.cssText='font-size:10px;color:#ffd27a';
+        s.innerHTML=`${pName(p.from)} proposes ${p.type==='treaty'?'mil. treaty':p.type} `+
+          `<button onclick="respondDiplo(${i},true)" style="font-size:10px;padding:1px 6px">Accept</button>`+
+          `<button onclick="respondDiplo(${i},false)" style="font-size:10px;padding:1px 6px">Decline</button>`;
+        pe.appendChild(s);
+      } else if(p.from===activePlayer){
+        const s=document.createElement('span');
+        s.style.cssText='font-size:10px;color:#5a7a9a';
+        s.textContent='(sent '+p.type+' → '+pName(p.to)+')';
+        pe.appendChild(s);
+      }
+    });
+  }
+  const si=document.getElementById('sel-info');
+  if(si)si.textContent=selectedSystems.size+' selected — click / shift-click your systems on the map';
+}
+// ---- map selection + bulk transfer/build ----
+let selectedSystems=new Set();
+function clearSelection(){selectedSystems.clear();renderMap(galaxyData);renderDiploBar();}
+function toggleSelectSystem(sys,additive){
+  if(capitalPhase)return;
+  if(sys.owner!==activePlayer){ // can only select your own systems
+    if(!additive){selectedSystems.clear();renderMap(galaxyData);renderDiploBar();}
+    return;
+  }
+  if(additive){
+    if(selectedSystems.has(sys.id))selectedSystems.delete(sys.id);else selectedSystems.add(sys.id);
+  } else {
+    const only=selectedSystems.size===1&&selectedSystems.has(sys.id);
+    selectedSystems.clear();
+    if(!only)selectedSystems.add(sys.id);
+  }
+  // clicking a system also points the Buildings bar at it
+  const bs=document.getElementById('build-system');
+  if(bs&&selectedSystems.has(sys.id)){
+    if([...bs.options].some(o=>o.value===sys.id)){bs.value=sys.id;updateBuildNote();}
+  }
+  renderMap(galaxyData);renderDiploBar();
+}
+function transferSelected(){
+  if(!mpCanAct()){alert("Spectators cannot act.");return}
+  if(!selectedSystems.size){alert('Select systems first (click / shift-click your systems on the map).');return}
+  const tgt=document.getElementById('diplo-target').value;
+  if(!tgt){alert('Pick a target player (or Neutral) in the Diplomacy bar.');return}
+  if(!confirm('Transfer '+selectedSystems.size+' system(s) to '+(tgt==='neutral'?'Neutral':pName(tgt))+'?'))return;
+  let nT=0;
+  galaxyData.systems.forEach(s=>{if(selectedSystems.has(s.id)&&s.owner===activePlayer){s.owner=tgt;nT++;}});
+  logEvent(pName(activePlayer)+' transferred '+nT+' system(s) to '+(tgt==='neutral'?'Neutral':pName(tgt)));
+  selectedSystems.clear();
+  renderMap(galaxyData);renderStats(galaxyData);renderShips();renderGameBar();renderDiploBar();autoSave();
+}
+function buildOnSelected(){
+  if(!mpCanAct()){alert("Spectators cannot act.");return}
+  if(!selectedSystems.size){alert('Select systems first (click / shift-click your systems on the map).');return}
+  const bt=buildingTypes.find(t=>t.id===document.getElementById('build-type').value);
+  if(!bt){alert('Pick a building type in the Buildings bar.');return}
+  const ps=playerState[activePlayer];
+  let built=0,failed=0;
+  galaxyData.systems.forEach(s=>{
+    if(!selectedSystems.has(s.id)||s.owner!==activePlayer)return;
+    if(!s.buildings)s.buildings=[];
+    const c=scaledBuildingCost(s,bt);
+    if(c.maxed||ps.metals<c.metals||ps.explosives<c.explosives){failed++;return;}
+    ps.metals-=c.metals;ps.explosives-=c.explosives;
+    s.buildings.push({id:'b'+(buildingIdCounter++),typeId:bt.id});
+    built++;
+  });
+  alert('Built '+bt.name+' on '+built+' system(s)'+(failed?(' — '+failed+' skipped (max reached or not enough resources)'):'')+'.');
+  renderMap(galaxyData);renderStats(galaxyData);renderGameBar();autoSave();
 }
 
 // ---- Buildings ----
@@ -2056,8 +2637,10 @@ function canSeeFleet(s){
 }
 function renderShips(){
   const layer=document.getElementById('ship-layer');layer.innerHTML='';
+  const fog=(playerView&&fogOfWar&&!capitalPhase&&galaxyData)?computeFogSet(activePlayer):null;
   ships.forEach(s=>{
     if(!canSeeFleet(s))return;
+    if(fog&&s.owner!==activePlayer&&!fog.has(s.anchor))return; // hidden by fog
     const color=pColor(s.owner);
     const g=document.createElementNS(ns,'g');
     g.setAttribute('class','ship-token');
@@ -2102,7 +2685,7 @@ function renderShips(){
       db.setAttribute('fill',color);db.setAttribute('stroke','#000');db.setAttribute('stroke-width','1');db.setAttribute('opacity','0.95');inner.appendChild(db);
     }
 
-    const tw=s.name.length*5.4+8;
+    const tw=(s.name||'').length*5.4+8;
     const bg=document.createElementNS(ns,'rect');
     bg.setAttribute('class','ship-label-bg');
     bg.setAttribute('x',-tw/2);bg.setAttribute('y','20');bg.setAttribute('width',tw);bg.setAttribute('height','13');bg.setAttribute('rx','3');inner.appendChild(bg);
@@ -2173,17 +2756,44 @@ function enableDrag(g,ship){
     dragging=false;
     if(!moved)return; // pure click — let the click handler open the editor
     const sys=nearestSystem(ship.x,ship.y);
-    if(sys){
-      ship.anchor=sys.id;
-      // remember the angle from the system center to where the player dropped the token,
-      // so the token sits on THAT side of the system's edge (and stays there on regenerate)
+    if(!sys){snapBack();return}
+    if(sys.id===ship.anchor){
+      // same system — just repositioning around the edge, free
       const dx0=ship.x-sys.x, dy0=ship.y-sys.y;
       ship.anchorAngle=(dx0===0&&dy0===0)?0:Math.atan2(dy0,dx0);
       const pos=edgeAnchorPos(sys,ship);
       ship.x=pos.x;ship.y=pos.y;
       g.setAttribute('transform',`translate(${ship.x},${ship.y})`);
       renderShips();renderTokenList();autoSave();
+      return;
     }
+    // moving to a different system: must be adjacent via a hyperlane
+    const from=galaxyData.systems.find(s=>s.id===ship.anchor);
+    if(!from||!systemsAdjacent(ship.anchor,sys.id)){
+      alert('Fleets can only jump along hyperlanes to an ADJACENT system. Chain multiple jumps if you have the AP.');
+      snapBack();return;
+    }
+    const jc=jumpCost(ship.owner,from,sys);
+    if(jc.blocked){alert(jc.blocked);snapBack();return;}
+    if(typeof ship.ap!=='number')ship.ap=fleetAPMax;
+    if(jc.cost>ship.ap){
+      alert('Not enough AP: this jump costs '+jc.cost+' AP but the fleet has '+ship.ap+' left this turn.');
+      snapBack();return;
+    }
+    ship.ap-=jc.cost;
+    ship.anchor=sys.id;
+    const dx0=ship.x-sys.x, dy0=ship.y-sys.y;
+    ship.anchorAngle=(dx0===0&&dy0===0)?0:Math.atan2(dy0,dx0);
+    const pos=edgeAnchorPos(sys,ship);
+    ship.x=pos.x;ship.y=pos.y;
+    g.setAttribute('transform',`translate(${ship.x},${ship.y})`);
+    renderShips();renderTokenList();autoSave();
+  }
+  function snapBack(){
+    const home=galaxyData.systems.find(s=>s.id===ship.anchor);
+    if(home){const pos=edgeAnchorPos(home,ship);ship.x=pos.x;ship.y=pos.y;}
+    g.setAttribute('transform',`translate(${ship.x},${ship.y})`);
+    renderShips();
   }
   g.addEventListener('mousedown',start);
   g.addEventListener('touchstart',start,{passive:false});
@@ -2352,6 +2962,15 @@ panEl.addEventListener('input',()=>{
 
 window.addEventListener('resize',drawStarfield);
 window.addEventListener('keydown',e=>{if(e.key==='Escape'&&regionMode)cancelRegion()});
+document.getElementById('map').addEventListener('click',e=>{
+  if(!placingRegion)return;
+  const p=clientToMap(e.clientX,e.clientY);
+  placingRegion=false;document.getElementById('map').style.cursor='';
+  updateAutoNote();
+  const name=prompt('Region name:');if(!name||!name.trim())return;
+  regionLabels.push({x:Math.round(p.x),y:Math.round(p.y),name:name.trim()});
+  renderMap(galaxyData);autoSave();
+});
 setupPanZoom();
 renderComposition();
 if(!tryAutoLoad())generate();
