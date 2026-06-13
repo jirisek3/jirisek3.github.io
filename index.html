@@ -139,6 +139,7 @@ try{ if(window.firebase){ firebase.initializeApp(FIREBASE_CONFIG); fbDB=firebase
     <div class="ctrl-group gen-only"><label>High-roll bias %</label><div class="ctrl-row"><span class="cur" id="v-hibias">0</span><input type="range" id="p-hibias" min="-100" max="100" value="0" step="5"><span class="max">100</span></div></div>
     <div class="ctrl-group gen-only"><label>Special multiplier</label><div class="ctrl-row"><span class="cur" id="v-specmult">2</span><input type="range" id="p-specmult" min="1" max="5" value="2" step="0.5"><span class="max">5</span></div></div>
     <div class="ctrl-group gen-only" id="special-controls"><label>Special systems %</label><div class="ctrl-row"><span class="cur" id="v-special">15</span><input type="range" id="p-special" min="0" max="50" value="15" step="1"><span class="max">50</span></div></div>
+    <div class="ctrl-group gen-only"><label>Green star</label><div class="ctrl-row"><label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#7a9ab8"><input type="checkbox" id="p-greenstar"> one random green star</label></div></div>
     <div class="ctrl-group gen-only"><label>Min spacing</label><div class="ctrl-row"><span class="cur" id="v-spacing">70</span><input type="range" id="p-spacing" min="20" max="150" value="70" step="5"><span class="max">150</span></div></div>
     <div class="ctrl-group gen-only"><label>Seed</label><div class="ctrl-row"><input type="number" id="p-seed" value="42" style="width:70px"><button onclick="randomSeed()" style="padding:4px 8px">?</button></div></div>
     <div class="ctrl-group"><label>Pan speed</label><div class="ctrl-row"><span class="cur" id="v-panspeed">1.5</span><input type="range" id="p-panspeed" min="0.5" max="10" value="1.5" step="0.1"><span class="max">10</span></div></div>
@@ -436,7 +437,8 @@ let laneMin=1, laneMax=4;
 // ---- fleet movement (AP) ----
 let fleetAPMax=6; // AP per fleet per turn (configurable in Setup)
 // ---- perspective lock: per-player passwords ----
-let lockedCard=null; // double-click a player card to hide the others (double-click again to unhide)
+let lockedCard=null;
+let placingStartFor=null; // pid of a newly-added player who is picking a start system // double-click a player card to hide the others (double-click again to unhide)
 // ---- region labels ----
 let regionLabels=[]; // {x,y,name}
 let placingRegion=false;
@@ -491,11 +493,11 @@ function jumpCost(owner,sysFrom,sysTo){
   return {cost};
 }
 // flavor map names assigned to systems (shown on hover); editable via .txt upload
-let mapNames=['Silent Citadel','Small Testing Range','The Belt','The Cliff','Tombstones','Tumbleweed','Yukon',
+let mapNames=['Silent Citadel','The Belt','The Cliff','Tombstones','Tumbleweed','Yukon',
   'Bloodmoon Eclipsed','Earth','Mars',"Nyx's Eye",'Pillars','Abyssal','Arroyo','Avora','Caltrop','Canyon','Cicada',
   'Shattered Tube','Shattered Wall','Spindle Station','Trench Gate','Trench Gate B','Trench Gate C',
   'Fraizen Fields','Karst Shelf',"Lichen's Nail",'Sector 821','Shadowed Heart','Shattered Plates','Shattered Shelter',
-  'Kentari Rock (Night)','Seabyssal','Storm\u2019s Bluff','Apophis\u2019s Fall','Calypsis Ice Shelf','Fallen Majesty','Farluaan Ruins',
+  'Kentari Rock (Night)','Apophis\u2019s Fall','Calypsis Ice Shelf','Fallen Majesty','Farluaan Ruins',
   'Beneres Station','Beneres Station (No Rocks)','Grethosian Wastes','Ilivia Stack','Kalathean Ruins',"Karlia's Stand",'Kentari Rock (Day)'];
 // assign a random map name to each system (re-rollable)
 function assignMapNames(){
@@ -630,6 +632,58 @@ function initPlayerState(n,reset){
   for(let i=1;i<=n;i++){const pid='p'+i;ns2[pid]=(!reset&&playerState[pid])?playerState[pid]:{metals:0,explosives:0,ended:false}}
   playerState=ns2;
   if(!playerState[activePlayer])activePlayer='p1';
+}
+// the ACTUAL list of players in the game (survives mid-game add/remove of any slot)
+function playerIds(){return Object.keys(playerState).sort((a,b)=>parseInt(a.slice(1))-parseInt(b.slice(1)))}
+// ---- GM: add / remove players mid-game ----
+function gmAddPlayer(){
+  if(mpRoom&&!isGM){alert('Only the GM can add players in a live game.');return}
+  if(!galaxyData){alert('Generate a galaxy first (player count before generation is set with the slider).');return}
+  if(playerIds().length>=10){alert('Maximum of 10 players.');return}
+  let pid=null;
+  for(let i=1;i<=10;i++){if(!playerState['p'+i]){pid='p'+i;break}}
+  if(!pid)return;
+  playerState[pid]={metals:0,explosives:0,ended:false};
+  defaultProfiles(10);
+  galaxyData.nPlayers=playerIds().length;
+  logEvent(pName(pid)+' joined the game');
+  placingStartFor=pid;
+  switchPlayer(pid);
+  renderGameBar();renderSetupPanel();renderMap(galaxyData);autoSave();
+  updateAutoNote2(pName(pid)+' added — click a neutral star to choose their starting system (Esc to skip)');
+  alert(pName(pid)+' added. Now click an unclaimed (neutral) system on the map to set their starting world — it gets a Shipyard like a capital. Press Esc to skip and leave them without territory.');
+}
+function updateAutoNote2(msg){const n=document.getElementById('autosave-note');if(n)n.textContent=msg;}
+function placeNewPlayerStart(sysId){
+  const pid=placingStartFor;if(!pid)return;
+  const sys=galaxyData.systems.find(s=>s.id===sysId);if(!sys)return;
+  if(sys.owner!=='neutral'){alert('That system is already owned. Pick an unclaimed (neutral) one.');return}
+  sys.owner=pid;sys.buildings=sys.buildings||[];
+  sys.buildings.push({id:'b'+(buildingIdCounter++),typeId:(buildingTypes.find(t=>t.shipyard)||{}).id});
+  sys.points=systemPointOutput(sys);
+  sys.devLevel=1;sys.devProg=0;
+  capitals[pid]=sysId;
+  placingStartFor=null;
+  logEvent(pName(pid)+' established their starting system at '+sys.name);
+  updateAutoNote();
+  renderMap(galaxyData);renderStats(galaxyData);renderShips();renderGameBar();autoSave();
+}
+function gmRemovePlayer(pid){
+  if(mpRoom&&!isGM){alert('Only the GM can remove players in a live game.');return}
+  if(!playerState[pid])return;
+  if(playerIds().length<=2){alert('A game needs at least 2 players.');return}
+  if(!confirm('Remove '+pName(pid)+' from the game?\nTheir systems become neutral and their fleets are disbanded.'))return;
+  if(galaxyData)galaxyData.systems.forEach(s=>{if(s.owner===pid){s.owner='neutral';s.devLevel=1;s.devProg=0;}});
+  ships=ships.filter(f=>f.owner!==pid);
+  delete capitals[pid];
+  delete playerState[pid];
+  Object.keys(diploRelations).forEach(k=>{if(k.split('|').includes(pid))delete diploRelations[k]});
+  diploProposals=diploProposals.filter(p=>p.from!==pid&&p.to!==pid);
+  if(lockedCard===pid)lockedCard=null;
+  if(activePlayer===pid)activePlayer=playerIds()[0];
+  if(galaxyData)galaxyData.nPlayers=playerIds().length;
+  logEvent(pName(pid)+' was removed from the game');
+  renderGameBar();renderSetupPanel();renderMap(galaxyData);renderShips();renderTokenList();autoSave();
 }
 const ns='http://www.w3.org/2000/svg';
 
@@ -814,6 +868,10 @@ function generate(opts){
   // capital candidates are remembered but NOT auto-assigned; players claim them in setup
   systems.forEach(s=>{s.planets=s.planets||rn(3,6)});
 
+  const gsEl=document.getElementById('p-greenstar');
+  if(gsEl&&gsEl.checked&&systems.length){
+    systems[Math.floor(rng()*systems.length)].greenStar=true;
+  }
   galaxyData={systems,lanes,nPlayers,placedCount,reqCount:nSys,reqSpacing,usedSpacing};
   assignMapNames();
   if(!opts.keepState){
@@ -863,7 +921,7 @@ function claimCapital(sysId){
   sys.points=systemPointOutput(sys); // seed one turn of build points so turn 1 isn't empty
   capitals[pid]=sysId;
   // all players chosen? end the phase
-  const allChosen=Array.from({length:galaxyData.nPlayers},(_,i)=>'p'+(i+1)).every(p=>capitals[p]);
+  const allChosen=playerIds().every(p=>capitals[p]);
   if(allChosen)capitalPhase=false;
   renderMap(galaxyData);renderStats(galaxyData);renderShips();renderGameBar();updateCapitalPhaseUI();autoSave();
 }
@@ -872,7 +930,7 @@ function updateCapitalPhaseUI(){
   const banner=document.getElementById('capital-banner');
   if(!banner)return;
   if(capitalPhase&&galaxyData){
-    const n=galaxyData.nPlayers;
+    const n=playerIds().length;
     const chosen=Object.keys(capitals).length;
     const mine=capitals[activePlayer];
     let txt=`SETUP — choose your capital by clicking a system (${chosen}/${n} chosen). `;
@@ -993,7 +1051,7 @@ function renderMap({systems,lanes}){
     const color=sys.owner==='neutral'?'#aabbcc':pColor(sys.owner);
     const isSpecial=(sys.type==='pulsar'||sys.type==='anomaly');
     const specColor=sys.type==='pulsar'?'#cc66ff':sys.type==='anomaly'?'#e0a060':null;
-    const starColor=color; // star always shows ownership, not specialization
+    const starColor=sys.greenStar?'#3ee87a':color; // green star keeps its color even when owned
     const r=sys.owner!=='neutral'?30:({standard:18,dwarf:11,pulsar:14,anomaly:16}[sys.type]||18);
     const hideInfo=playerView||capitalPhase; // during capital phase, resources & specials are hidden
     const g=document.createElementNS(ns,'g');g.style.cursor='pointer';
@@ -1027,6 +1085,11 @@ function renderMap({systems,lanes}){
       claimable.setAttribute('fill','none');claimable.setAttribute('stroke','rgba(140,200,255,0.35)');claimable.setAttribute('stroke-width','2');claimable.setAttribute('stroke-dasharray','6 6');g.appendChild(claimable);
     }
 
+    if(sys.greenStar){
+      const glow=document.createElementNS(ns,'circle');
+      glow.setAttribute('cx',sys.x);glow.setAttribute('cy',sys.y);glow.setAttribute('r',r+11);
+      glow.setAttribute('fill','rgba(62,232,122,0.18)');g.appendChild(glow);
+    }
     const star=document.createElementNS(ns,'circle');
     star.setAttribute('cx',sys.x);star.setAttribute('cy',sys.y);star.setAttribute('r',r);star.setAttribute('fill',starColor);g.appendChild(star);
 
@@ -1039,6 +1102,7 @@ function renderMap({systems,lanes}){
     g.addEventListener('mousemove',moveTip);
     g.addEventListener('mouseleave',hideTip);
     if(capitalPhase)g.addEventListener('click',ev=>{ev.stopPropagation();claimCapital(sys.id)});
+    else if(placingStartFor)g.addEventListener('click',ev=>{ev.stopPropagation();placeNewPlayerStart(sys.id)});
     else g.addEventListener('click',ev=>{ev.stopPropagation();toggleSelectSystem(sys,ev.shiftKey)});
     if(selectedSystems.has(sys.id)){
       const selRing=document.createElementNS(ns,'circle');
@@ -1057,6 +1121,7 @@ function showTip(e,sys){
   const tip=document.getElementById('tooltip');
   let html=`<div class="tname">${sys.name}</div>`;
   if(sys.mapName)html+=`<div style="font-size:10px;color:#9ad4ff;margin:-2px 0 4px">${sys.mapName}</div>`;
+  if(sys.greenStar)html+=`<div style="font-size:10px;color:#3ee87a;margin:-2px 0 4px">● Green star</div>`;
   if(sys.owner!=='neutral')html+=`<div class="trow"><span>Development</span><span class="tv">Lv ${systemDevLevel(sys)}${systemDevLevel(sys)<devCfg.maxLevel?' ('+(sys.devProg||0)+'/'+devCfg.turnsPerLevel+')':' (max)'}</span></div>`;
   html+=`<div class="trow"><span>Owner</span><span class="tv">${sys.owner==='neutral'?'Neutral':pName(sys.owner)}</span></div>`;
   if(playerView||capitalPhase){
@@ -1620,12 +1685,10 @@ function playerIncome(pid){
 
 function renderGameBar(){
   if(!galaxyData)return;
-  const n=galaxyData.nPlayers;
-  if(Object.keys(playerState).length!==n)initPlayerState(n);
+  if(!Object.keys(playerState).length)initPlayerState(galaxyData.nPlayers);
   const tabs=document.getElementById('player-tabs');tabs.innerHTML='';
-  for(let i=1;i<=n;i++){
-    const pid='p'+i;
-    if(lockedCard&&pid!==lockedCard)continue; // locked: other cards hidden (dbl-click the card to unhide)
+  playerIds().forEach(pid=>{
+    if(lockedCard&&pid!==lockedCard)return; // locked: other cards hidden (dbl-click the card to unhide)
     const tab=document.createElement('div');
     tab.className='ptab'+(pid===activePlayer?' active':'');
     tab.onclick=()=>switchPlayer(pid);
@@ -1633,7 +1696,7 @@ function renderGameBar(){
     tab.title='Double-click to hide the other player cards (double-click again to bring them back)';
     tab.innerHTML=`<span class="pd" style="background:${pColor(pid)}"></span>${pName(pid)}${playerState[pid]&&playerState[pid].ended?' <span class="done">✓</span>':''}`;
     tabs.appendChild(tab);
-  }
+  });
   const ps=playerState[activePlayer]||{metals:0,explosives:0,ended:false};
   document.getElementById('active-player-name').textContent=pName(activePlayer);
   document.getElementById('active-player-name').style.color=pColor(activePlayer);
@@ -1659,13 +1722,12 @@ function renderGameBar(){
   btn.textContent=ps.ended?'Ended ✓ (undo)':'End turn';
   document.getElementById('turn-num').textContent=turnNum;
   const st=document.getElementById('endturn-status');st.innerHTML='';
-  for(let i=1;i<=n;i++){
-    const pid='p'+i;
+  playerIds().forEach(pid=>{
     const c=document.createElement('span');
     c.className='es-chip'+(playerState[pid]&&playerState[pid].ended?' ended':'');
-    c.textContent='P'+i+(playerState[pid]&&playerState[pid].ended?' ✓':' …');
+    c.textContent='P'+pid.slice(1)+(playerState[pid]&&playerState[pid].ended?' ✓':' …');
     st.appendChild(c);
-  }
+  });
   const bo=document.getElementById('builder-owner');
   if(bo){bo.textContent=pName(activePlayer);bo.style.color=pColor(activePlayer)}
   populateSpawnSelect();
@@ -1841,14 +1903,16 @@ function applyState(st){
     if(typeof st.config.pointStoragePct==='number')pointStoragePct=st.config.pointStoragePct;
     if(st.config.prodCfg)prodCfg=Object.assign(prodCfg,st.config.prodCfg);
     if(st.config.playerProfiles)playerProfiles=st.config.playerProfiles;
-    if(st.config.fleetTemplates)fleetTemplates=st.config.fleetTemplates;
-    if(st.config.shipRoster)shipRoster=st.config.shipRoster;
+    // NOTE: Firebase strips empty arrays/objects from synced state, so for collaborative
+    // collections an ABSENT key means EMPTY — otherwise deletions of the last item never sync.
+    fleetTemplates=st.config.fleetTemplates||[];
+    shipRoster=st.config.shipRoster||[];
     if(st.config.mapNames&&st.config.mapNames.length)mapNames=st.config.mapNames;
     if(typeof st.config.fleetAPMax==='number')fleetAPMax=st.config.fleetAPMax;
-    if(st.config.diploRelations)diploRelations=st.config.diploRelations;
-    if(st.config.diploProposals)diploProposals=st.config.diploProposals;
-    if(st.config.regionLabels)regionLabels=st.config.regionLabels;
-    if(st.config.gameLog)gameLog=st.config.gameLog;
+    diploRelations=st.config.diploRelations||{};
+    diploProposals=st.config.diploProposals||[];
+    regionLabels=st.config.regionLabels||[];
+    gameLog=st.config.gameLog||[];
     if(st.config.devCfg)devCfg=Object.assign(devCfg,st.config.devCfg);
     if(typeof st.config.winSystems==='number')winSystems=st.config.winSystems;
     if(st.config.buildingTypes){
@@ -1863,7 +1927,8 @@ function applyState(st){
     if(typeof st.config.laneMax==='number')laneMax=st.config.laneMax;
   }
   defaultProfiles(10);
-  if(Object.keys(playerState).length!==galaxyData.nPlayers)initPlayerState(galaxyData.nPlayers);
+  if(!Object.keys(playerState).length)initPlayerState(galaxyData.nPlayers);
+  else galaxyData.nPlayers=Object.keys(playerState).length;
   // backfill map names for galaxies saved before this feature existed
   if(galaxyData&&galaxyData.systems&&galaxyData.systems.some(s=>!s.mapName))assignMapNames();
   reanchorFleets();
@@ -2070,14 +2135,21 @@ function toggleSetup(){
   if(open)renderSetupPanel();
 }
 function renderSetupPanel(){
-  const n=galaxyData?galaxyData.nPlayers:parseInt(document.getElementById('p-players').value);
+  const ids=galaxyData?playerIds():Array.from({length:parseInt(document.getElementById('p-players').value)},(_,i)=>'p'+(i+1));
   // profiles
   const pe=document.getElementById('profile-editor');pe.innerHTML='';
-  for(let i=1;i<=n;i++){
-    const pid='p'+i;const prof=playerProfiles[pid];
+  defaultProfiles(10);
+  ids.forEach(pid=>{
+    const prof=playerProfiles[pid];
     const row=document.createElement('div');row.className='prow';
-    row.innerHTML=`<input type="color" value="${prof.color}" onchange="setProfileColor('${pid}',this.value)"><input type="text" value="${prof.name.replace(/"/g,'&quot;')}" onchange="setProfileName('${pid}',this.value)">`;
+    row.innerHTML=`<input type="color" value="${prof.color}" onchange="setProfileColor('${pid}',this.value)"><input type="text" value="${prof.name.replace(/"/g,'&quot;')}" onchange="setProfileName('${pid}',this.value)">`+
+      (galaxyData&&ids.length>2?`<span style="color:#c06060;cursor:pointer;font-size:13px;padding:0 4px" title="Remove this player (systems go neutral, fleets disband)" onclick="gmRemovePlayer('${pid}')">✕</span>`:'');
     pe.appendChild(row);
+  });
+  if(galaxyData&&ids.length<10){
+    const addRow=document.createElement('div');
+    addRow.innerHTML=`<button onclick="gmAddPlayer()" style="font-size:11px;margin-top:4px" title="Add a new player mid-game (they start with no territory)">+ Add player</button>`;
+    pe.appendChild(addRow);
   }
   // production cost config fields
   const setv=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v;};
@@ -2097,11 +2169,11 @@ function renderSetupPanel(){
 }
 function populateDiploSelects(){
   const dt=document.getElementById('diplo-target');if(!dt)return;
-  const n=galaxyData?galaxyData.nPlayers:parseInt(document.getElementById('p-players').value);
+  const ids=galaxyData?playerIds():Array.from({length:parseInt(document.getElementById('p-players').value)},(_,i)=>'p'+(i+1));
   const prev=dt.value;
   dt.innerHTML='';
   const optN=document.createElement('option');optN.value='neutral';optN.textContent='Neutral';dt.appendChild(optN);
-  for(let i=1;i<=n;i++){const pid='p'+i;if(pid===activePlayer)continue;const o=document.createElement('option');o.value=pid;o.textContent=pName(pid);dt.appendChild(o)}
+  ids.forEach(pid=>{if(pid===activePlayer)return;const o=document.createElement('option');o.value=pid;o.textContent=pName(pid);dt.appendChild(o)});
   if([...dt.options].some(o=>o.value===prev))dt.value=prev;
   renderDiploBar();
 }
@@ -2899,6 +2971,7 @@ panEl.addEventListener('input',()=>{
 window.addEventListener('resize',drawStarfield);
 window.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&regionMode)cancelRegion();
+  if(e.key==='Escape'&&placingStartFor){placingStartFor=null;document.getElementById('map').style.cursor='';updateAutoNote();renderMap(galaxyData);}
   if(e.key==='Escape'&&placingRegion){placingRegion=false;rlStart=null;if(rlRectEl){rlRectEl.remove();rlRectEl=null;}document.getElementById('map').style.cursor='';updateAutoNote();}
 });
 setupPanZoom();
