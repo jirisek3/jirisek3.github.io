@@ -37,6 +37,25 @@ button.primary:hover{background:rgba(40,100,200,0.75)}
 .token-chip .chip-x:hover{color:#ff6655}
 
 #map-area{position:relative;background:#07090f;user-select:none;-webkit-user-select:none;-moz-user-select:none}
+.tooltab{background:none;border:none;border-bottom:3px solid transparent;color:#7a8fa8;font-family:'Courier New',monospace;font-size:12px;padding:9px 13px;cursor:pointer;border-radius:0}
+.tooltab:hover{color:#c8d8f0;background:rgba(80,140,220,0.08)}
+.tooltab.active{color:#ffe066;border-bottom-color:#ffe066;background:rgba(80,140,220,0.10)}
+#controls.collapsed-gen{display:none}
+#gen-reopen{display:none}
+body.gen-collapsed #gen-reopen{display:inline-block}
+.lg-summary{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:9px}
+.lg-chip{background:rgba(20,34,58,0.7);border:1px solid rgba(80,140,220,0.2);border-radius:7px;padding:6px 12px;min-width:78px}
+.lg-chip-l{font-size:9px;color:#5a7a9a;text-transform:uppercase;letter-spacing:0.5px}
+.lg-chip-v{font-size:17px;font-weight:bold;margin-top:2px}
+.lg-table{border-collapse:collapse;width:100%;font-family:'Courier New',monospace;font-size:11px}
+.lg-table th{padding:4px 12px 5px 8px;color:#5a7a9a;cursor:pointer;border-bottom:1px solid rgba(80,140,220,0.3);font-weight:normal;white-space:nowrap;position:sticky;top:0;background:rgba(10,18,32,0.99)}
+.lg-table th:hover{color:#c8d8f0}
+.lg-table th.lg-sorted{color:#ffd27a}
+.lg-table td{padding:4px 12px 4px 8px;border-bottom:1px solid rgba(80,140,220,0.07)}
+.lg-table tbody tr{cursor:pointer}
+.lg-table tbody tr:nth-child(even){background:rgba(80,140,220,0.04)}
+.lg-table tbody tr:hover{background:rgba(80,140,220,0.14)}
+.lg-tag{font-size:9px;border:1px solid currentColor;border-radius:3px;padding:0 3px;margin-left:2px;opacity:0.8}
 canvas#bg{position:absolute;inset:0;pointer-events:none}
 svg#map{display:block;width:100%;touch-action:none;cursor:grab}
 svg#map.panning{cursor:grabbing}
@@ -168,7 +187,7 @@ try{ if(window.firebase){ firebase.initializeApp(FIREBASE_CONFIG); fbDB=firebase
       <span class="gb-label">Turn <span id="turn-num" class="gb-value">1</span></span>
       <span id="endturn-status"></span>
       <span style="flex:1"></span>
-      <button onclick="toggleSetup()" class="gm-only">Setup</button>
+      
       <button onclick="exportImage('hd')" class="export-btn">Export HD</button>
       <button onclick="exportImage('4k')" class="export-btn">Export 4K</button>
       <button onclick="startRegionExport('hd')" class="export-btn">Region HD</button>
@@ -200,6 +219,19 @@ try{ if(window.firebase){ firebase.initializeApp(FIREBASE_CONFIG); fbDB=firebase
     </div>
   </div>
 
+  <div id="tool-tabs" style="display:none;background:rgba(8,14,26,0.98);border-bottom:1px solid rgba(80,140,220,0.25);padding:0 8px;display:flex;gap:2px;flex-wrap:wrap;align-items:center">
+    <button class="tooltab" data-tab="fleet" onclick="showTab('fleet')">Fleet</button>
+    <button class="tooltab" data-tab="build" onclick="showTab('build')">Build</button>
+    <button class="tooltab" data-tab="diplo" onclick="showTab('diplo')">Diplomacy</button>
+    <button class="tooltab" data-tab="ledger" onclick="showTab('ledger')">Ledger &amp; Log</button>
+    <button class="tooltab gen-only" data-tab="setup" onclick="showTab('setup')">Setup</button>
+    <button class="tooltab" data-tab="none" onclick="showTab('none')" title="Hide panels — maximize the map">Map only</button>
+    <span style="flex:1"></span>
+    <input type="text" id="sys-search" placeholder="find system…" onkeydown="if(event.key==='Enter')searchSystem()" style="background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#c8d8f0;font-family:'Courier New',monospace;font-size:11px;padding:4px 8px;width:120px">
+    <button class="tooltab" onclick="toggleLegend()" title="What the map symbols mean">Legend</button>
+    <button class="tooltab gen-only" id="gen-reopen" onclick="toggleGenPanel()" title="Show/hide the galaxy generation settings">Galaxy settings</button>
+  </div>
+
   <div id="setup-panel" style="display:none;background:rgba(10,16,30,0.99);border-bottom:1px solid rgba(80,140,220,0.25);padding:14px 16px">
     <div style="display:flex;flex-wrap:wrap;gap:24px">
       <div>
@@ -219,6 +251,8 @@ try{ if(window.firebase){ firebase.initializeApp(FIREBASE_CONFIG); fbDB=firebase
           <label class="gb-label">Dev: turns per level <input type="number" id="cfg-devturns" value="5" min="1" title="Owned systems gain a development level every N turns (max level 5)" style="width:64px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px" onchange="setDevCfg('turnsPerLevel',this.value)"></label>
           <label class="gb-label">Dev: +% yield per level <input type="number" id="cfg-devpct" value="25" min="0" title="Each development level above 1 multiplies the system's resource yield by this much more" style="width:64px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px" onchange="setDevCfg('yieldPctPerLevel',this.value)"></label>
           <label class="gb-label">Systems to win (0=off) <input type="number" id="cfg-winsys" value="0" min="0" title="When a player controls this many systems at turn end, victory is announced" style="width:64px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px" onchange="setWinSystems(this.value)"></label>
+          <label class="gb-label" style="display:flex;align-items:center;gap:6px">Territory shading <input type="checkbox" id="cfg-territory" checked onchange="territoryShading=this.checked;if(galaxyData)renderMap(galaxyData);autoSave()"></label>
+          <label class="gb-label" style="display:flex;align-items:center;gap:6px">Color-blind palette <input type="checkbox" id="cfg-cb" onchange="setColorBlind(this.checked)"></label>
         </div>
         <div style="margin-top:10px"><label class="gb-label">Extra-shipyard bonus % <input type="number" id="cfg-extrayard" value="25" min="0" title="Each EXTRA shipyard on a system adds this % to its build-point output" style="width:60px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px" onchange="setExtraYard(this.value)"></label></div>
         <div style="margin-top:8px"><label class="gb-label">Point storage cap % <input type="number" id="cfg-ptcap" value="150" min="0" title="Max stored build points per system = its per-turn output × this %" style="width:60px;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:3px 6px" onchange="setPointCap(this.value)"></label></div>
@@ -323,6 +357,21 @@ try{ if(window.firebase){ firebase.initializeApp(FIREBASE_CONFIG); fbDB=firebase
       <button onclick="resetView()" title="Reset view" style="font-size:9px">⟲</button>
     </div>
     <div id="tooltip"></div>
+    <div id="map-popover" style="display:none;position:absolute;z-index:28;background:rgba(8,14,28,0.97);border:1px solid rgba(80,140,220,0.5);border-radius:8px;padding:10px 12px;font-size:11px;font-family:'Courier New',monospace;color:#c8d8f0;min-width:180px;max-width:260px;box-shadow:0 6px 22px rgba(0,0,0,0.55)"></div>
+    <div id="toast-wrap" style="position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:30;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none"></div>
+    <div id="legend-overlay" style="display:none;position:absolute;top:12px;left:12px;z-index:25;background:rgba(6,12,24,0.95);border:1px solid rgba(80,140,220,0.45);border-radius:8px;padding:12px 14px;font-size:11px;font-family:'Courier New',monospace;color:#c8d8f0;max-width:330px;box-shadow:0 6px 24px rgba(0,0,0,0.5)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><b style="color:#ffe066">Map legend</b><span style="cursor:pointer;color:#7a8fa8" onclick="toggleLegend()">close ✕</span></div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#ffe066;vertical-align:middle"></span> &nbsp;Star = a system, colored by its owner (grey = neutral)</div>
+        <div><span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:#3ee87a;vertical-align:middle"></span> &nbsp;Green star = the special green system</div>
+        <div><span style="color:#ffd27a">◇</span> &nbsp;Blue diamond on a lane = hypergate (−1 AP when both ends have one)</div>
+        <div><span style="color:#ffd27a">⊙</span> &nbsp;Gold dashed ring = system you've selected</div>
+        <div><span style="color:#9ae0c0">AP</span> &nbsp;Fleet action points: own land 3 · neutral/hostile 6 · gate 2</div>
+        <div>Drag a fleet to an <b>adjacent</b> system to move it (reachable systems glow green)</div>
+        <div><span style="color:#96b4e6">Faint big text</span> &nbsp;= a region/sector label</div>
+        <div>Hover any star for its name, resources, and development level</div>
+      </div>
+    </div>
     <div id="map-player-badge" style="position:absolute;top:10px;right:12px;z-index:14;background:rgba(6,12,24,0.88);border:1px solid rgba(80,140,220,0.4);border-radius:8px;padding:6px 12px;font-size:13px;font-family:'Courier New',monospace;display:flex;align-items:center;gap:8px;pointer-events:none">
       <span id="map-badge-dot" style="width:12px;height:12px;border-radius:50%;background:#ffe066;display:inline-block"></span>
       <span style="color:#7a8fa8">Playing as</span> <span id="map-badge-name" style="font-weight:bold;color:#ffe066">Player 1</span>
@@ -355,7 +404,22 @@ try{ if(window.firebase){ firebase.initializeApp(FIREBASE_CONFIG); fbDB=firebase
 </div>
 
 <script>
-const PLAYER_COLORS={p1:'#ffe066',p2:'#66aaff',p3:'#ff6655',p4:'#55ee99',p5:'#cc88ff',p6:'#ff9933',p7:'#44d4d4',p8:'#ff77bb',p9:'#aaddff',p10:'#bbdd55'};
+let colorBlindMode=false;
+const PLAYER_COLORS_DEFAULT={p1:'#ffe066',p2:'#66aaff',p3:'#ff6655',p4:'#55ee99',p5:'#cc88ff',p6:'#ff9933',p7:'#44d4d4',p8:'#ff77bb',p9:'#aaddff',p10:'#bbdd55'};
+// Okabe-Ito-inspired palette: distinguishable for the common forms of color blindness
+const PLAYER_COLORS_CB={p1:'#e69f00',p2:'#56b4e9',p3:'#d55e00',p4:'#009e73',p5:'#cc79a7',p6:'#f0e442',p7:'#0072b2',p8:'#ff99cc',p9:'#aaccee',p10:'#999999'};
+let PLAYER_COLORS=Object.assign({},PLAYER_COLORS_DEFAULT);
+function setColorBlind(on){
+  colorBlindMode=!!on;
+  PLAYER_COLORS=Object.assign({},on?PLAYER_COLORS_CB:PLAYER_COLORS_DEFAULT);
+  // refresh any default-colored profiles that haven't been hand-customized
+  Object.keys(playerProfiles).forEach(pid=>{
+    if(playerProfiles[pid]&&(playerProfiles[pid].color===PLAYER_COLORS_DEFAULT[pid]||playerProfiles[pid].color===PLAYER_COLORS_CB[pid]))
+      playerProfiles[pid].color=PLAYER_COLORS[pid];
+  });
+  if(galaxyData){renderMap(galaxyData);renderShips();renderGameBar();}
+  autoSave();
+}
 const RES_TYPES=[
   {key:'metals',     label:'Metals',     color:'#e0a060', statId:'st-metals'},
   {key:'explosives', label:'Explosives', color:'#cc66ff', statId:'st-explosives'},
@@ -438,6 +502,7 @@ let laneMin=1, laneMax=4;
 let fleetAPMax=6; // AP per fleet per turn (configurable in Setup)
 // ---- perspective lock: per-player passwords ----
 let lockedCard=null;
+let territoryShading=true;
 let placingStartFor=null; // pid of a newly-added player who is picking a start system // double-click a player card to hide the others (double-click again to unhide)
 // ---- region labels ----
 let regionLabels=[]; // {x,y,name}
@@ -474,6 +539,33 @@ function systemsAdjacent(idA,idB){
   if(ia<0||ib<0)return false;
   return galaxyData.lanes.some(([a,b])=>(a===ia&&b===ib)||(a===ib&&b===ia));
 }
+// highlight systems a fleet can jump to right now (green = affordable, dim red = blocked/too far)
+function highlightReachable(ship){
+  clearReachable();
+  if(!galaxyData)return;
+  const from=galaxyData.systems.find(s=>s.id===ship.anchor);if(!from)return;
+  const fromIdx=galaxyData.systems.indexOf(from);
+  const ap=typeof ship.ap==='number'?ship.ap:fleetAPMax;
+  const layer=document.getElementById('lanes-layer');
+  galaxyData.lanes.forEach(([a,b])=>{
+    let other=null;
+    if(a===fromIdx)other=galaxyData.systems[b];
+    else if(b===fromIdx)other=galaxyData.systems[a];
+    if(!other)return;
+    const jc=jumpCost(ship.owner,from,other);
+    const ok=!jc.blocked&&jc.cost<=ap;
+    const ring=document.createElementNS(ns,'circle');
+    ring.setAttribute('class','reach-ring');
+    ring.setAttribute('cx',other.x);ring.setAttribute('cy',other.y);
+    ring.setAttribute('r',(other.owner!=='neutral'?30:18)+10);
+    ring.setAttribute('fill','none');
+    ring.setAttribute('stroke',ok?'#3ee87a':'rgba(200,90,90,0.5)');
+    ring.setAttribute('stroke-width',ok?'5':'3');
+    ring.setAttribute('stroke-dasharray',ok?'none':'6 6');
+    layer.appendChild(ring);
+  });
+}
+function clearReachable(){document.querySelectorAll('.reach-ring').forEach(e=>e.remove());}
 function systemHasHypergate(s){
   if(!s||!s.buildings)return false;
   return s.buildings.some(b=>{const bt=buildingTypes.find(t=>t.id===b.typeId);return bt&&bt.hypergate});
@@ -1085,6 +1177,12 @@ function renderMap({systems,lanes}){
       claimable.setAttribute('fill','none');claimable.setAttribute('stroke','rgba(140,200,255,0.35)');claimable.setAttribute('stroke-width','2');claimable.setAttribute('stroke-dasharray','6 6');g.appendChild(claimable);
     }
 
+    if(sys.owner!=='neutral'&&territoryShading){
+      const halo=document.createElementNS(ns,'circle');
+      halo.setAttribute('cx',sys.x);halo.setAttribute('cy',sys.y);halo.setAttribute('r',r+34);
+      halo.setAttribute('fill',pColor(sys.owner));halo.setAttribute('opacity','0.10');
+      g.appendChild(halo);
+    }
     if(sys.greenStar){
       const glow=document.createElementNS(ns,'circle');
       glow.setAttribute('cx',sys.x);glow.setAttribute('cy',sys.y);glow.setAttribute('r',r+11);
@@ -1103,7 +1201,7 @@ function renderMap({systems,lanes}){
     g.addEventListener('mouseleave',hideTip);
     if(capitalPhase)g.addEventListener('click',ev=>{ev.stopPropagation();claimCapital(sys.id)});
     else if(placingStartFor)g.addEventListener('click',ev=>{ev.stopPropagation();placeNewPlayerStart(sys.id)});
-    else g.addEventListener('click',ev=>{ev.stopPropagation();toggleSelectSystem(sys,ev.shiftKey)});
+    else g.addEventListener('click',ev=>{ev.stopPropagation();toggleSelectSystem(sys,ev.shiftKey);if(!ev.shiftKey)showSystemPopover(sys,ev.clientX,ev.clientY);});
     if(selectedSystems.has(sys.id)){
       const selRing=document.createElementNS(ns,'circle');
       selRing.setAttribute('cx',sys.x);selRing.setAttribute('cy',sys.y);selRing.setAttribute('r',r+14);
@@ -1421,7 +1519,17 @@ function placeFleet(){
   const tsel=document.getElementById('template-select');if(tsel)tsel.value='';
   renderShips();renderTokenList();renderGameBar();autoSave();
 }
-function clearShips(){if(!confirm('Remove ALL fleets?'))return;ships=[];renderShips();renderTokenList();autoSave()}
+function clearShips(){
+  if(mpRoom&&!isGM){
+    if(!confirm('Remove all of YOUR fleets? (Other players keep theirs.)'))return;
+    ships=ships.filter(f=>f.owner!==activePlayer);
+    toast('Your fleets cleared');
+  } else {
+    if(!confirm('Remove ALL fleets from every player?'))return;
+    ships=[];toast('All fleets cleared');
+  }
+  renderShips();renderTokenList();autoSave();
+}
 function removeShip(id){ships=ships.filter(s=>s.id!==id);renderShips();renderTokenList();autoSave()}
 
 // ---- Templates (per-player) ----
@@ -1536,8 +1644,9 @@ function showFleetDetail(f){
   html+=`</div></div></div>`;
   html+=`<div style="font-size:10px;color:#5a7a9a;margin-top:5px">Adding a ship costs its resources + build points (at a shipyard). Removing a single ship refunds its resources only at a shipyard, otherwise it's scrapped with no refund.</div>`;
   el.innerHTML=html;
-  el.style.display='block';
   el.dataset.fleet=f.id;
+  if(activeTab!=='fleet')showTab('fleet');
+  el.style.display='block';
 }
 function renameFleet(id,val){
   if(!mpCanAct())return;
@@ -1737,8 +1846,132 @@ function renderGameBar(){
   renderStandings();
   populateDiploSelects();
   populateBuildSelects();
+  // reveal the tabbed tool strip once a galaxy exists, and keep one panel showing
+  // collapse the big generation slider panel once a galaxy exists (it's only needed pre-game)
+  const ctrls=document.getElementById('controls');
+  if(ctrls){
+    if(galaxyData){ctrls.classList.add('collapsed-gen');document.body.classList.add('gen-collapsed');}
+    else {ctrls.classList.remove('collapsed-gen');document.body.classList.remove('gen-collapsed');}
+  }
+  const tt=document.getElementById('tool-tabs');
+  if(tt){tt.style.display='flex';}
+  applyActiveTab();
+}
+function applyActiveTab(){
+  if(!document.getElementById('tool-tabs'))return;
+  showTab(activeTab||'fleet');
+}
+function toggleGenPanel(){
+  const c=document.getElementById('controls');if(!c)return;
+  c.classList.toggle('collapsed-gen');
+}
+function toggleLegend(){
+  const o=document.getElementById('legend-overlay');if(!o)return;
+  o.style.display=o.style.display==='none'?'block':'none';
+}
+function searchSystem(){
+  if(!galaxyData)return;
+  const q=(document.getElementById('sys-search').value||'').trim().toLowerCase();
+  if(!q)return;
+  const s=galaxyData.systems.find(x=>(x.name||'').toLowerCase().includes(q)||(x.mapName||'').toLowerCase().includes(q));
+  if(s)focusSystem(s.id);
+  else toast('No system matches "'+q+'"','warn');
+}
+// ---- map click popover (info + shortcuts; tabs still update underneath) ----
+function closePopover(){const p=document.getElementById('map-popover');if(p)p.style.display='none';}
+function positionPopover(clientX,clientY){
+  const p=document.getElementById('map-popover');if(!p)return;
+  const area=document.getElementById('map-area').getBoundingClientRect();
+  let x=clientX-area.left+14, y=clientY-area.top+14;
+  p.style.display='block'; // measure
+  const pw=p.offsetWidth, ph=p.offsetHeight;
+  if(x+pw>area.width-8)x=clientX-area.left-pw-14;
+  if(y+ph>area.height-8)y=area.height-ph-8;
+  if(x<6)x=6; if(y<6)y=6;
+  p.style.left=x+'px';p.style.top=y+'px';
+}
+function showSystemPopover(sys,clientX,clientY){
+  const p=document.getElementById('map-popover');if(!p)return;
+  const mine=sys.owner===activePlayer;
+  const ownerTxt=sys.owner==='neutral'?'<span style="color:#7a8fa8">Neutral</span>':'<span style="color:'+pColor(sys.owner)+'">'+pName(sys.owner)+'</span>';
+  let h='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px">'+
+    '<b style="color:#dCe8fa">'+sys.name+'</b>'+
+    '<span style="cursor:pointer;color:#7a8fa8" onclick="closePopover()">✕</span></div>';
+  if(sys.mapName)h+='<div style="color:#9ad4ff;font-size:10px;margin-bottom:4px">'+sys.mapName+'</div>';
+  h+='<div style="margin-bottom:2px">Owner: '+ownerTxt+'</div>';
+  if(sys.owner!=='neutral')h+='<div style="margin-bottom:2px">Development: Lv '+systemDevLevel(sys)+'</div>';
+  h+='<div style="margin-bottom:2px"><span style="color:#e0a060">'+sys.resources.metals+' M</span> · <span style="color:#cc66ff">'+sys.resources.explosives+' E</span> / turn</div>';
+  if(mine)h+='<div style="margin-bottom:6px;color:#8fe0a8">'+systemPoints(sys)+' build pts (+'+systemPointOutput(sys)+'/turn)</div>';
+  const tags=[];if(systemHasShipyard(sys))tags.push('Shipyard');if(systemHasHypergate(sys))tags.push('Hypergate');
+  if(tags.length)h+='<div style="margin-bottom:6px;color:#7a9ab8;font-size:10px">'+tags.join(' · ')+'</div>';
+  // shortcut buttons
+  h+='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:4px">';
+  h+='<button onclick="popFocus(\''+sys.id+'\')" style="font-size:10px;padding:3px 8px">Center</button>';
+  if(mine){
+    h+='<button onclick="popBuild(\''+sys.id+'\')" style="font-size:10px;padding:3px 8px">Build here</button>';
+    h+='<button onclick="popTransfer(\''+sys.id+'\')" style="font-size:10px;padding:3px 8px">Transfer</button>';
+  } else if(mpCanAct()){
+    h+='<button onclick="popSelect(\''+sys.id+'\')" style="font-size:10px;padding:3px 8px">Select</button>';
+  }
+  h+='</div>';
+  p.innerHTML=h;
+  positionPopover(clientX,clientY);
+}
+function showFleetPopover(f,clientX,clientY){
+  const p=document.getElementById('map-popover');if(!p)return;
+  let h='<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px">'+
+    '<b style="color:'+pColor(f.owner)+'">'+f.name+'</b>'+
+    '<span style="cursor:pointer;color:#7a8fa8" onclick="closePopover()">✕</span></div>';
+  h+='<div style="margin-bottom:2px">'+pName(f.owner)+' · '+fleetPoints(f)+' pts · '+fleetStars(f)+'★</div>';
+  if(typeof f.ap==='number')h+='<div style="margin-bottom:4px;color:'+(f.ap>0?'#3ee87a':'#5a6a7a')+'">AP '+f.ap+' / '+fleetAPMax+'</div>';
+  if(f.owner===activePlayer)h+='<div style="font-size:10px;color:#7a9ab8;margin-bottom:6px">Drag the token to an adjacent system to move</div>';
+  h+='<div style="display:flex;gap:5px;flex-wrap:wrap">';
+  if(canViewFleet(f))h+='<button onclick="popFleet(\''+f.id+'\')" style="font-size:10px;padding:3px 8px">Open details</button>';
+  h+='<button onclick="popFocus(\''+f.anchor+'\')" style="font-size:10px;padding:3px 8px">Center</button>';
+  h+='</div>';
+  p.innerHTML=h;
+  positionPopover(clientX,clientY);
+}
+// popover button actions
+function popFocus(id){closePopover();focusSystem(id);}
+function popBuild(id){const sys=galaxyData.systems.find(s=>s.id===id);if(sys)toggleSelectSystem(sys,false);showTab('build');closePopover();}
+function popTransfer(id){const sys=galaxyData.systems.find(s=>s.id===id);if(sys&&!selectedSystems.has(id))toggleSelectSystem(sys,false);showTab('diplo');closePopover();}
+function popSelect(id){const sys=galaxyData.systems.find(s=>s.id===id);if(sys)toggleSelectSystem(sys,false);closePopover();}
+function popFleet(id){const f=ships.find(s=>s.id===id);if(f)showFleetDetail(f);closePopover();}
+// non-blocking toast message
+function toast(msg,kind){
+  const wrap=document.getElementById('toast-wrap');if(!wrap){return}
+  const t=document.createElement('div');
+  const col=kind==='bad'?'rgba(120,40,40,0.95)':kind==='warn'?'rgba(120,90,30,0.95)':'rgba(20,40,70,0.95)';
+  const bd=kind==='bad'?'#e08080':kind==='warn'?'#ffd27a':'#7ab0e0';
+  t.style.cssText='pointer-events:auto;background:'+col+';border:1px solid '+bd+';border-radius:7px;padding:7px 14px;font-size:12px;font-family:Courier New,monospace;color:#eaf2ff;box-shadow:0 4px 16px rgba(0,0,0,0.5);opacity:0;transition:opacity .15s,transform .15s;transform:translateY(8px)';
+  t.textContent=msg;
+  wrap.appendChild(t);
+  requestAnimationFrame(()=>{t.style.opacity='1';t.style.transform='translateY(0)'});
+  setTimeout(()=>{t.style.opacity='0';t.style.transform='translateY(8px)';setTimeout(()=>t.remove(),200)},2600);
 }
 
+let activeTab='fleet';
+const TAB_BARS={
+  fleet:['fleet-bar','fleet-detail'],
+  build:['build-bar'],
+  diplo:['diplo-bar'],
+  ledger:['ledger-bar'],
+  setup:['setup-panel']
+};
+function showTab(tab){
+  if(tab==='setup'&&mpRoom&&!isGM){alert('Only the GM can open Setup in a live room.');return}
+  activeTab=tab;
+  // hide every managed bar, then show the chosen group
+  Object.values(TAB_BARS).flat().forEach(id=>{const el=document.getElementById(id);if(el)el.style.display='none';});
+  if(tab==='setup')renderSetupPanel();
+  (TAB_BARS[tab]||[]).forEach(id=>{
+    const el=document.getElementById(id);if(!el)return;
+    if(id==='fleet-detail'&&el.dataset.fleet&&document.querySelector('.ship-token'))el.style.display='block';
+    else if(id!=='fleet-detail')el.style.display='';
+  });
+  document.querySelectorAll('.tooltab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+}
 function toggleCardLock(pid){
   if(lockedCard===pid){lockedCard=null;}
   else{lockedCard=pid;switchPlayer(pid);}
@@ -1832,7 +2065,7 @@ function advanceTurn(){
       const cnt=galaxyData.systems.filter(s=>s.owner===pid).length;
       if(cnt>=winSystems&&!winAnnounced){
         winAnnounced=true;
-        logEvent('🏆 '+pName(pid)+' controls '+cnt+' systems and WINS the game!');
+        logEvent(pName(pid)+' controls '+cnt+' systems and WINS the game!');
         setTimeout(()=>alert(pName(pid)+' controls '+cnt+' systems and WINS the game!'),50);
       }
     });
@@ -1846,9 +2079,10 @@ function advanceTurn(){
 }
 
 const SAVE_KEY='nebulous4x_save';
+const SAVE_VERSION=2;
 function gatherState(){
   return{
-    version:2,
+    version:SAVE_VERSION,
     settings:{
       systems:document.getElementById('p-systems').value,
       players:document.getElementById('p-players').value,
@@ -1867,7 +2101,7 @@ function gatherState(){
     },
     galaxy:galaxyData?{systems:galaxyData.systems,lanes:galaxyData.lanes,nPlayers:galaxyData.nPlayers,placedCount:galaxyData.placedCount,reqCount:galaxyData.reqCount,reqSpacing:galaxyData.reqSpacing,usedSpacing:galaxyData.usedSpacing}:null,
     ships,shipIdCounter,activePlayer,turnNum,playerState,capitalPhase,capitals,
-    config:{CLASS_POINTS,POINTS_PER_STAR,CLASS_BUILD_COST,extraShipyardPct,pointStoragePct,prodCfg,fleetAPMax,diploRelations,diploProposals,regionLabels,gameLog,devCfg,winSystems,playerProfiles,fleetTemplates,shipRoster,mapNames,laneMin,laneMax,buildingTypes,buildingIdCounter}
+    config:{CLASS_POINTS,POINTS_PER_STAR,CLASS_BUILD_COST,extraShipyardPct,pointStoragePct,prodCfg,fleetAPMax,diploRelations,diploProposals,regionLabels,gameLog,devCfg,winSystems,territoryShading,colorBlindMode,playerProfiles,fleetTemplates,shipRoster,mapNames,laneMin,laneMax,buildingTypes,buildingIdCounter}
   };
 }
 function applyState(st){
@@ -1915,6 +2149,8 @@ function applyState(st){
     gameLog=st.config.gameLog||[];
     if(st.config.devCfg)devCfg=Object.assign(devCfg,st.config.devCfg);
     if(typeof st.config.winSystems==='number')winSystems=st.config.winSystems;
+    if(typeof st.config.territoryShading==='boolean')territoryShading=st.config.territoryShading;
+    if(st.config.colorBlindMode!==undefined){setColorBlind(st.config.colorBlindMode);}
     if(st.config.buildingTypes){
       buildingTypes=st.config.buildingTypes;
       // backfill: saves from before the Hypergate existed don't have it — add it so it's buildable
@@ -1943,6 +2179,7 @@ function autoSave(){
 // ---- Multiplayer (Firebase Realtime DB) ----
 let mpRoom=null;        // active room code
 let mpRef=null;         // firebase ref
+let mpSyncBroken=false; // true once a write has failed (so we only toast on change)
 let mpApplying=false;   // true while applying a remote snapshot (suppress echo)
 let mpPushTimer=null;
 
@@ -2051,7 +2288,9 @@ function mpPush(){
   clearTimeout(mpPushTimer);
   mpPushTimer=setTimeout(()=>{
     // preserve gmHash/joinHash; only ever write game state under .state
-    mpRef.child('state').set(mpCleanState()).catch(e=>mpSetStatus('push error: '+e.message,'#e08080'));
+    mpRef.child('state').set(mpCleanState())
+      .then(()=>{if(mpSyncBroken){mpSyncBroken=false;toast('Sync restored','ok');}})
+      .catch(e=>{mpSetStatus('push error: '+e.message,'#e08080');if(!mpSyncBroken){mpSyncBroken=true;toast('Sync blocked — players may be out of date. Check Firebase rules.','bad');}});
   },180);
 }
 // can this client take a game action right now?
@@ -2119,8 +2358,15 @@ function loadGameFile(ev){
   const file=ev.target.files[0];if(!file)return;
   const r=new FileReader();
   r.onload=()=>{
-    try{const st=JSON.parse(r.result);if(applyState(st)){autoSave();}else alert('Could not read that save file.');}
-    catch(e){alert('Invalid save file.');}
+    try{
+      const st=JSON.parse(r.result);
+      if(!st||!st.galaxy){toast('That file has no galaxy data — not a valid save.','bad');return;}
+      const fileVer=st.version||1;
+      if(fileVer>SAVE_VERSION&&!confirm('This save (v'+fileVer+') is NEWER than this app (v'+SAVE_VERSION+'). Loading it may behave oddly. Continue?'))return;
+      if(applyState(st)){autoSave();toast(fileVer<SAVE_VERSION?('Loaded older save (v'+fileVer+') — migrated to v'+SAVE_VERSION):'Game loaded','ok');}
+      else toast('Could not read that save file.','bad');
+    }
+    catch(e){toast('Invalid save file (not valid JSON).','bad');}
   };
   r.readAsText(file);
   ev.target.value='';
@@ -2162,6 +2408,8 @@ function renderSetupPanel(){
   setv('cfg-fleetap',fleetAPMax);
   setv('cfg-devturns',devCfg.turnsPerLevel);setv('cfg-devpct',devCfg.yieldPctPerLevel);
   setv('cfg-winsys',winSystems);
+  const terEl=document.getElementById('cfg-territory');if(terEl)terEl.checked=territoryShading;
+  const cbEl=document.getElementById('cfg-cb');if(cbEl)cbEl.checked=colorBlindMode;
   const exEl=document.getElementById('cfg-extrayard');if(exEl)exEl.value=extraShipyardPct;
   const pcEl=document.getElementById('cfg-ptcap');if(pcEl)pcEl.value=pointStoragePct;
   renderBuildingTypesEditor();
@@ -2243,8 +2491,9 @@ function renderLedger(){
   if(!ledgerOpen)return;
   if(!galaxyData){tbl.innerHTML='<span style="color:#3a5a7a">generate a galaxy first</span>';return}
   const rows=galaxyData.systems.filter(s=>s.owner===activePlayer).map(s=>({
-    name:s.name, map:s.mapName||'', lvl:systemDevLevel(s), metals:s.resources.metals, explosives:s.resources.explosives,
+    id:s.id, name:s.name, map:s.mapName||'—', lvl:systemDevLevel(s), metals:s.resources.metals, explosives:s.resources.explosives,
     pts:systemPoints(s), out:systemPointOutput(s),
+    yard:systemHasShipyard(s), gate:systemHasHypergate(s),
     blds:(s.buildings||[]).length
   }));
   rows.sort((a,b)=>{
@@ -2252,15 +2501,53 @@ function renderLedger(){
     if(typeof va==='string'||typeof vb==='string')return String(va).localeCompare(String(vb));
     return (vb||0)-(va||0);
   });
-  const cols=[['name','System'],['map','Map'],['lvl','Lv'],['metals','Metals'],['explosives','Explosives'],['pts','Build pts'],['out','Pts/turn'],['blds','Buildings']];
-  let html='<table style="border-collapse:collapse;width:100%;font-family:\'Courier New\',monospace;font-size:11px">';
-  html+='<tr>'+cols.map(([k,l])=>`<th style="text-align:left;padding:2px 10px 2px 0;color:${ledgerSort===k?'#ffd27a':'#5a7a9a'};cursor:pointer;border-bottom:1px solid rgba(80,140,220,0.3)" onclick="ledgerSort='${k}';renderLedger()">${l}${ledgerSort===k?' ↓':''}</th>`).join('')+'</tr>';
+  // summary header
+  const tot=rows.reduce((a,r)=>({m:a.m+r.metals,e:a.e+r.explosives,o:a.o+r.out,b:a.b+r.blds}),{m:0,e:0,o:0,b:0});
+  const chip=(lbl,val,col)=>`<div class="lg-chip"><div class="lg-chip-l">${lbl}</div><div class="lg-chip-v" style="color:${col}">${val}</div></div>`;
+  let html='<div class="lg-summary">'+
+    chip('Systems',rows.length,'#a0c4f0')+
+    chip('Metals / turn','+'+tot.m,'#e0a060')+
+    chip('Explosives / turn','+'+tot.e,'#cc66ff')+
+    chip('Build pts / turn','+'+tot.o,'#8fe0a8')+
+    chip('Buildings',tot.b,'#9ad4ff')+
+  '</div>';
+  // table
+  const numCols=['lvl','metals','explosives','pts','out','blds'];
+  const cols=[['name','System'],['map','Map name'],['lvl','Lv'],['metals','M'],['explosives','E'],['pts','Build'],['out','/turn'],['blds','Bld']];
+  html+='<table class="lg-table"><thead><tr>'+cols.map(([k,l])=>{
+    const active=ledgerSort===k;const align=numCols.includes(k)?'right':'left';
+    return `<th style="text-align:${align}" class="${active?'lg-sorted':''}" onclick="ledgerSort='${k}';renderLedger()">${l}${active?' ↓':''}</th>`;
+  }).join('')+'</tr></thead><tbody>';
+  if(!rows.length)html+='<tr><td colspan="8" style="color:#3a5a7a;padding:8px 0;text-align:center">you own no systems</td></tr>';
   rows.forEach(r=>{
-    html+='<tr>'+cols.map(([k])=>`<td style="padding:2px 10px 2px 0;color:#c0d4f0">${r[k]}</td>`).join('')+'</tr>';
+    const pips='●'.repeat(r.lvl)+'<span style="color:#2a3a52">'+'○'.repeat(Math.max(0,5-r.lvl))+'</span>';
+    const tags=(r.yard?'<span class="lg-tag" title="Shipyard" style="color:#8fe0a8">Y</span>':'')+(r.gate?'<span class="lg-tag" title="Hypergate" style="color:#9ad4ff">G</span>':'');
+    html+=`<tr onclick="focusSystem('${r.id}')" title="Click to center the map on ${r.name}">`+
+      `<td style="color:#dCe8fa;font-weight:bold">${r.name} ${tags}</td>`+
+      `<td style="color:#7a9ab8">${r.map}</td>`+
+      `<td style="text-align:right;color:#9ad4ff;letter-spacing:1px;font-size:9px">${pips}</td>`+
+      `<td style="text-align:right;color:#e0a060">${r.metals}</td>`+
+      `<td style="text-align:right;color:#cc66ff">${r.explosives}</td>`+
+      `<td style="text-align:right;color:#c0d4f0">${r.pts}</td>`+
+      `<td style="text-align:right;color:#8fe0a8">+${r.out}</td>`+
+      `<td style="text-align:right;color:#9ad4ff">${r.blds}</td>`+
+    `</tr>`;
   });
-  if(!rows.length)html+='<tr><td colspan="7" style="color:#3a5a7a;padding:4px 0">you own no systems</td></tr>';
-  html+='</table>';
+  html+='</tbody></table>';
   tbl.innerHTML=html;
+}
+// center the map view on a system (used by the ledger rows)
+function focusSystem(id){
+  if(!galaxyData)return;
+  const s=galaxyData.systems.find(x=>x.id===id);if(!s)return;
+  selectedSystems=new Set([id]);
+  view.scale=Math.max(view.scale,1.6); clampView();
+  // center the system in the 13000x8400 viewBox: tx + s.x*scale = 6500
+  view.tx=6500 - s.x*view.scale;
+  view.ty=4200 - s.y*view.scale;
+  applyTransform();
+  renderMap(galaxyData);
+  toast('Focused '+s.name);
 }
 function sendResources(){
   if(!mpCanAct()){alert("Spectators cannot act.");return}
@@ -2292,14 +2579,21 @@ function renderStandings(){
   }));
   rows.sort((a,b)=>b.systems-a.systems);
   let html='';
-  if(winSystems>0)html+='<div style="color:#ffd27a;font-size:10px;margin-bottom:3px">First to control '+winSystems+' systems wins.</div>';
-  html+='<table style="border-collapse:collapse;font-family:\'Courier New\',monospace;font-size:11px"><tr>'+
-    ['Player','Systems','Fleet pts','Metals','Explosives'].map(c=>'<th style="text-align:left;padding:2px 14px 2px 0;color:#5a7a9a;border-bottom:1px solid rgba(80,140,220,0.3)">'+c+'</th>').join('')+'</tr>';
-  rows.forEach(r=>{
-    html+='<tr><td style="padding:2px 14px 2px 0;color:'+pColor(r.pid)+';font-weight:bold">'+r.name+'</td>'+
-      [r.systems,r.fleetPts,r.metals,r.explosives].map(v=>'<td style="padding:2px 14px 2px 0;color:#c0d4f0">'+v+'</td>').join('')+'</tr>';
+  if(winSystems>0)html+='<div style="color:#ffd27a;font-size:10px;margin-bottom:6px">First to control '+winSystems+' systems wins.</div>';
+  const max=Math.max(1,...rows.map(r=>r.systems));
+  html+='<table class="lg-table"><thead><tr>'+
+    ['#','Player','Systems','Fleet pts','Metals','Explosives'].map((c,i)=>'<th style="text-align:'+(i>=2?'right':'left')+'">'+c+'</th>').join('')+'</tr></thead><tbody>';
+  rows.forEach((r,i)=>{
+    const bar=Math.round(r.systems/max*100);
+    html+='<tr onclick="switchPlayer(\''+r.pid+'\')" title="View '+r.name+'">'+
+      '<td style="color:#5a7a9a">'+(i+1)+'</td>'+
+      '<td style="font-weight:bold;color:'+pColor(r.pid)+'"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+pColor(r.pid)+';margin-right:5px"></span>'+r.name+'</td>'+
+      '<td style="text-align:right;color:#dCe8fa;position:relative"><span style="position:absolute;left:0;top:3px;bottom:3px;width:'+bar+'%;background:'+pColor(r.pid)+';opacity:0.13;border-radius:2px"></span>'+r.systems+'</td>'+
+      '<td style="text-align:right;color:#c0d4f0">'+r.fleetPts+'</td>'+
+      '<td style="text-align:right;color:#e0a060">'+r.metals+'</td>'+
+      '<td style="text-align:right;color:#cc66ff">'+r.explosives+'</td></tr>';
   });
-  html+='</table>';
+  html+='</tbody></table>';
   panel.innerHTML=html;
 }
 function renderLogPanel(){
@@ -2431,7 +2725,7 @@ function toggleSelectSystem(sys,additive){
   // clicking a system also points the Buildings bar at it
   const bs=document.getElementById('build-system');
   if(bs&&selectedSystems.has(sys.id)){
-    if([...bs.options].some(o=>o.value===sys.id)){bs.value=sys.id;updateBuildNote();}
+    if([...bs.options].some(o=>o.value===sys.id)){bs.value=sys.id;updateBuildNote();if(activeTab!=='build'&&activeTab!=='diplo')showTab('build');}
   }
   renderMap(galaxyData);renderDiploBar();
 }
@@ -2463,7 +2757,7 @@ function buildOnSelected(){
     s.buildings.push({id:'b'+(buildingIdCounter++),typeId:bt.id});
     built++;
   });
-  alert('Built '+bt.name+' on '+built+' system(s)'+(failed?(' — '+failed+' skipped (max reached or not enough resources)'):'')+'.');
+  toast('Built '+bt.name+' on '+built+' system'+(built!==1?'s':'')+(failed?(' · '+failed+' skipped'):''),failed?'warn':'ok');
   renderMap(galaxyData);renderStats(galaxyData);renderGameBar();autoSave();
 }
 
@@ -2658,6 +2952,19 @@ function renderShips(){
       db.setAttribute('cx',-13);db.setAttribute('cy',-13);db.setAttribute('r','3.5');
       db.setAttribute('fill',color);db.setAttribute('stroke','#000');db.setAttribute('stroke-width','1');db.setAttribute('opacity','0.95');inner.appendChild(db);
     }
+    // AP badge on your own fleets (green if it can still move, grey if spent)
+    if(s.owner===activePlayer&&typeof s.ap==='number'){
+      const apc=s.ap>0?'#3ee87a':'#5a6a7a';
+      const bg2=document.createElementNS(ns,'circle');
+      bg2.setAttribute('cx',14);bg2.setAttribute('cy',-13);bg2.setAttribute('r','8');
+      bg2.setAttribute('fill','#0a1220');bg2.setAttribute('stroke',apc);bg2.setAttribute('stroke-width','1.5');
+      inner.appendChild(bg2);
+      const apt=document.createElementNS(ns,'text');
+      apt.setAttribute('x',14);apt.setAttribute('y',-10);apt.setAttribute('text-anchor','middle');
+      apt.setAttribute('fill',apc);apt.setAttribute('font-size','10');apt.setAttribute('font-family','Courier New,monospace');apt.setAttribute('font-weight','bold');
+      apt.textContent=s.ap;
+      inner.appendChild(apt);
+    }
 
     const tw=(s.name||'').length*5.4+8;
     const bg=document.createElementNS(ns,'rect');
@@ -2671,7 +2978,7 @@ function renderShips(){
 
     g.appendChild(inner);
     g.addEventListener('dblclick',ev=>{ev.stopPropagation();if(canViewFleet(s))removeShip(s.id)});
-    g.addEventListener('click',ev=>{ev.stopPropagation();if(canViewFleet(s))showFleetDetail(s);});
+    g.addEventListener('click',ev=>{ev.stopPropagation();if(canViewFleet(s)){showFleetDetail(s);}showFleetPopover(s,ev.clientX,ev.clientY);});
     enableDrag(g,s);
     layer.appendChild(g);
   });
@@ -2717,6 +3024,7 @@ function enableDrag(g,ship){
       if(Math.hypot(cx-downX,cy-downY)<5)return;
       moved=true;
       g.parentNode.appendChild(g); // bring to front only once dragging for real
+      highlightReachable(ship);
       e.preventDefault&&e.preventDefault();
     }
     const p=toViewport(e);
@@ -2729,6 +3037,7 @@ function enableDrag(g,ship){
     if(!dragging)return;
     dragging=false;
     if(!moved)return; // pure click — let the click handler open the editor
+    clearReachable();
     const sys=nearestSystem(ship.x,ship.y);
     if(!sys){snapBack();return}
     if(sys.id===ship.anchor){
@@ -2744,14 +3053,14 @@ function enableDrag(g,ship){
     // moving to a different system: must be adjacent via a hyperlane
     const from=galaxyData.systems.find(s=>s.id===ship.anchor);
     if(!from||!systemsAdjacent(ship.anchor,sys.id)){
-      alert('Fleets can only jump along hyperlanes to an ADJACENT system. Chain multiple jumps if you have the AP.');
+      toast('Fleets jump only to an adjacent system along a lane','warn');
       snapBack();return;
     }
     const jc=jumpCost(ship.owner,from,sys);
-    if(jc.blocked){alert(jc.blocked);snapBack();return;}
+    if(jc.blocked){toast(jc.blocked,'bad');snapBack();return;}
     if(typeof ship.ap!=='number')ship.ap=fleetAPMax;
     if(jc.cost>ship.ap){
-      alert('Not enough AP: this jump costs '+jc.cost+' AP but the fleet has '+ship.ap+' left this turn.');
+      toast('Not enough AP — needs '+jc.cost+', fleet has '+ship.ap,'warn');
       snapBack();return;
     }
     ship.ap-=jc.cost;
@@ -2761,9 +3070,11 @@ function enableDrag(g,ship){
     const pos=edgeAnchorPos(sys,ship);
     ship.x=pos.x;ship.y=pos.y;
     g.setAttribute('transform',`translate(${ship.x},${ship.y})`);
+    toast(ship.name+' jumped to '+sys.name+' (−'+jc.cost+' AP, '+ship.ap+' left)');
     renderShips();renderTokenList();autoSave();
   }
   function snapBack(){
+    clearReachable();
     const home=galaxyData.systems.find(s=>s.id===ship.anchor);
     if(home){const pos=edgeAnchorPos(home,ship);ship.x=pos.x;ship.y=pos.y;}
     g.setAttribute('transform',`translate(${ship.x},${ship.y})`);
@@ -2856,6 +3167,7 @@ function setupPanZoom(){
       e.preventDefault();return;
     }
     if(e.target.closest('.ship-token'))return;
+    closePopover();
     panning=true;svg.classList.add('panning');
     startX=e.clientX;startY=e.clientY;startTx=view.tx;startTy=view.ty;
     e.preventDefault();
@@ -2970,6 +3282,18 @@ panEl.addEventListener('input',()=>{
 
 window.addEventListener('resize',drawStarfield);
 window.addEventListener('keydown',e=>{
+  // global shortcuts (ignore when typing in an input)
+  const typing=/^(INPUT|TEXTAREA|SELECT)$/.test((e.target&&e.target.tagName)||'');
+  if(!typing&&galaxyData&&!capitalPhase){
+    if(e.key==='1')showTab('fleet');
+    else if(e.key==='2')showTab('build');
+    else if(e.key==='3')showTab('diplo');
+    else if(e.key==='4')showTab('ledger');
+    else if(e.key==='m'||e.key==='M')showTab('none');
+    else if(e.key==='l'||e.key==='L')toggleLegend();
+    else if((e.key==='f'||e.key==='F')){const s=document.getElementById('sys-search');if(s){s.focus();e.preventDefault();}}
+  }
+  if(e.key==='Escape'){closePopover();}
   if(e.key==='Escape'&&regionMode)cancelRegion();
   if(e.key==='Escape'&&placingStartFor){placingStartFor=null;document.getElementById('map').style.cursor='';updateAutoNote();renderMap(galaxyData);}
   if(e.key==='Escape'&&placingRegion){placingRegion=false;rlStart=null;if(rlRectEl){rlRectEl.remove();rlRectEl=null;}document.getElementById('map').style.cursor='';updateAutoNote();}
