@@ -228,6 +228,7 @@ try{ if(window.firebase){ firebase.initializeApp(FIREBASE_CONFIG); fbDB=firebase
     <button class="tooltab" data-tab="none" onclick="showTab('none')" title="Hide panels — maximize the map">Map only</button>
     <span style="flex:1"></span>
     <input type="text" id="sys-search" placeholder="find system…" onkeydown="if(event.key==='Enter')searchSystem()" style="background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#c8d8f0;font-family:'Courier New',monospace;font-size:11px;padding:4px 8px;width:120px">
+    <label class="tooltab" style="display:flex;align-items:center;gap:5px;cursor:default" title="How fast the map pans when you drag empty space — a personal view setting, not synced">Pan <input type="range" id="p-panspeed2" min="0.5" max="10" value="1.5" step="0.1" style="width:70px;vertical-align:middle"><span id="v-panspeed2" style="color:#9ad4ff;min-width:24px;display:inline-block">1.5</span></label>
     <button class="tooltab" onclick="toggleLegend()" title="What the map symbols mean">Legend</button>
     <button class="tooltab gen-only" id="gen-reopen" onclick="toggleGenPanel()" title="Show/hide the galaxy generation settings">Galaxy settings</button>
   </div>
@@ -2900,10 +2901,8 @@ function clientToMap(clientX,clientY){
 }
 
 function canSeeFleet(s){
-  // Solo / hotseat (no live room) or GM: see everything.
-  if(!mpRoom||isGM)return true;
-  // In a live game, a player sees only their own fleets.
-  return s.owner===activePlayer;
+  // All players (and the GM) see every fleet on the map — open-table visibility.
+  return true;
 }
 function renderShips(){
   const layer=document.getElementById('ship-layer');layer.innerHTML='';
@@ -3274,11 +3273,17 @@ function applyViewState(){
   if(el&&out)el.addEventListener('input',()=>{out.textContent=el.value});
 });
 
+function setPanSpeed(v){
+  panSpeed=parseFloat(v)||1.5;
+  const a=document.getElementById('p-panspeed'),b=document.getElementById('p-panspeed2');
+  if(a)a.value=panSpeed;if(b)b.value=panSpeed;
+  const va=document.getElementById('v-panspeed'),vb=document.getElementById('v-panspeed2');
+  if(va)va.textContent=panSpeed.toFixed(1);if(vb)vb.textContent=panSpeed.toFixed(1);
+}
 const panEl=document.getElementById('p-panspeed');
-panEl.addEventListener('input',()=>{
-  panSpeed=parseFloat(panEl.value);
-  document.getElementById('v-panspeed').textContent=panSpeed.toFixed(1);
-});
+panEl.addEventListener('input',()=>setPanSpeed(panEl.value));
+const panEl2=document.getElementById('p-panspeed2');
+if(panEl2)panEl2.addEventListener('input',()=>setPanSpeed(panEl2.value));
 
 window.addEventListener('resize',drawStarfield);
 window.addEventListener('keydown',e=>{
