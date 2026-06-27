@@ -158,6 +158,7 @@ try{ if(window.firebase){ firebase.initializeApp(FIREBASE_CONFIG); fbDB=firebase
     <div class="ctrl-group gen-only"><label>High-roll bias %</label><div class="ctrl-row"><span class="cur" id="v-hibias">0</span><input type="range" id="p-hibias" min="-100" max="100" value="0" step="5"><span class="max">100</span></div></div>
     <div class="ctrl-group gen-only"><label>Special multiplier</label><div class="ctrl-row"><span class="cur" id="v-specmult">2</span><input type="range" id="p-specmult" min="1" max="5" value="2" step="0.5"><span class="max">5</span></div></div>
     <div class="ctrl-group gen-only" id="special-controls"><label>Special systems %</label><div class="ctrl-row"><span class="cur" id="v-special">15</span><input type="range" id="p-special" min="0" max="50" value="15" step="1"><span class="max">50</span></div></div>
+    <div class="ctrl-group gen-only"><label>Territory mode</label><div class="ctrl-row"><select id="p-claimmode" title="Manual: players claim systems one by one during play. Closest capital: every system is auto-assigned to its nearest capital by hyperlane distance once all capitals are chosen." style="flex:1;background:rgba(14,24,44,0.95);border:1px solid rgba(80,140,220,0.35);border-radius:4px;color:#e0eaf8;padding:4px 6px;font-size:11px"><option value="manual">Manual claim</option><option value="proximity">Closest capital (auto-assign)</option></select></div></div>
     <div class="ctrl-group gen-only"><label>Green star</label><div class="ctrl-row"><label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#7a9ab8"><input type="checkbox" id="p-greenstar"> one random green star</label></div></div>
     <div class="ctrl-group gen-only"><label>Min spacing</label><div class="ctrl-row"><span class="cur" id="v-spacing">70</span><input type="range" id="p-spacing" min="20" max="150" value="70" step="5"><span class="max">150</span></div></div>
     <div class="ctrl-group gen-only"><label>Seed</label><div class="ctrl-row"><input type="number" id="p-seed" value="42" style="width:70px"><button onclick="randomSeed()" style="padding:4px 8px">?</button></div></div>
@@ -440,6 +441,7 @@ const GALAXY_CX=GALAXY_W/2, GALAXY_CY=GALAXY_H/2;
 const GALAXY_RX=Math.round(GALAXY_W*0.472), GALAXY_RY=Math.round(GALAXY_H*0.458);
 let playerState={};
 let capitalPhase=false;  // true during capital-selection setup
+let claimMode='manual';  // 'manual' = players claim systems by hand; 'proximity' = auto-assign to nearest capital after setup
 let capitals={};         // pid -> systemId once claimed
 
 let CLASS_POINTS={frigate:1,destroyer:2,cruiser:3,battleship:5,carrier:8,supercapital:15};
@@ -539,6 +541,76 @@ function systemsAdjacent(idA,idB){
   const ib=galaxyData.systems.findIndex(s=>s.id===idB);
   if(ia<0||ib<0)return false;
   return galaxyData.lanes.some(([a,b])=>(a===ia&&b===ib)||(a===ib&&b===ia));
+}
+// Build an adjacency list of system-index -> [neighbor indices] from the lane pairs.
+function buildAdjacency(){
+  const adj=galaxyData.systems.map(()=>[]);
+  galaxyData.lanes.forEach(([a,b])=>{adj[a].push(b);adj[b].push(a);});
+  return adj;
+}
+// BFS hyperlane (hop) distances from one start index to every system. Unreachable = Infinity.
+function hopDistancesFrom(startIdx,adj){
+  const dist=galaxyData.systems.map(()=>Infinity);
+  dist[startIdx]=0;
+  const q=[startIdx];
+  while(q.length){
+    const cur=q.shift();
+    for(const nb of adj[cur]){
+      if(dist[nb]===Infinity){dist[nb]=dist[cur]+1;q.push(nb);}
+    }
+  }
+  return dist;
+}
+// Auto-assign every neutral system to the player whose capital is the fewest hyperlane
+// hops away. Ties are broken by a 1dN coin flip among the tied players.
+function autoAssignByProximity(){
+  if(!galaxyData)return;
+  const ids=playerIds().filter(p=>capitals[p]);
+  if(!ids.length)return;
+  const adj=buildAdjacency();
+  // distance map per player from their capital
+  const distByPlayer={};
+  ids.forEach(p=>{
+    const capIdx=galaxyData.systems.findIndex(s=>s.id===capitals[p]);
+    distByPlayer[p]=capIdx>=0?hopDistancesFrom(capIdx,adj):galaxyData.systems.map(()=>Infinity);
+  });
+  let assigned=0, flips=0;
+  galaxyData.systems.forEach((sys,idx)=>{
+    if(sys.owner!=='neutral')return; // leave capitals (and anything already owned) alone
+    // find the minimum distance and which players share it
+    let best=Infinity, tied=[];
+    ids.forEach(p=>{
+      const d=distByPlayer[p][idx];
+      if(d<best){best=d;tied=[p];}
+      else if(d===best){tied.push(p);}
+    });
+    if(best===Infinity)return; // unreachable from any capital -> stays neutral
+    let winner;
+    if(tied.length===1){winner=tied[0];}
+    else{winner=tied[Math.floor(Math.random()*tied.length)];flips++;} // 1dN among the tied
+    sys.owner=winner;
+    sys.buildings=sys.buildings||[];
+    assigned++;
+  });
+  logEvent('Territory auto-assigned by closest capital ('+assigned+' systems'+(flips?(', '+flips+' tie'+(flips>1?'s':'')+' decided by coin flip'):'')+')');
+  return {assigned,flips};
+}
+// One-time lump sum: give each player `mult` times their current income, added to their stockpile.
+// Called once, after territory is assigned, so income reflects every system they hold.
+function injectStartingResources(mult){
+  if(!galaxyData)return null;
+  if(!Object.keys(playerState).length)initPlayerState(galaxyData.nPlayers);
+  let any=false;
+  playerIds().forEach(pid=>{
+    const inc=playerIncome(pid);
+    const ps=playerState[pid];if(!ps)return;
+    const gm=inc.m*mult, ge=inc.e*mult;
+    if(gm||ge){
+      ps.metals+=gm; ps.explosives+=ge; any=true;
+      logEvent(pName(pid)+' received a starting injection of '+gm+' metals and '+ge+' explosives ('+mult+'x income)');
+    }
+  });
+  return any;
 }
 // highlight systems a fleet can jump to right now (green = affordable, dim red = blocked/too far)
 function highlightReachable(ship){
@@ -858,6 +930,7 @@ function generate(opts){
   const specialPct=parseInt(document.getElementById('p-special').value);
   const reqSpacing=parseInt(document.getElementById('p-spacing').value);
   const seed=parseInt(document.getElementById('p-seed').value)||42;
+  const cm=document.getElementById('p-claimmode');if(cm)claimMode=cm.value;
   // resource generation config from sliders
   RES_CFG={
     metMin:parseInt(document.getElementById('p-metmin').value)||1,
@@ -1015,7 +1088,18 @@ function claimCapital(sysId){
   capitals[pid]=sysId;
   // all players chosen? end the phase
   const allChosen=playerIds().every(p=>capitals[p]);
-  if(allChosen)capitalPhase=false;
+  if(allChosen){
+    capitalPhase=false;
+    if(claimMode==='proximity'){
+      const res=autoAssignByProximity();
+      // one-time economic injection: each player receives 5x their (now-assigned) income
+      const inj=injectStartingResources(5);
+      let msg='Territory split by closest capital — '+(res?res.assigned:0)+' systems assigned';
+      if(res&&res.flips)msg+=', '+res.flips+' tie'+(res.flips>1?'s':'')+' coin-flipped';
+      if(inj)msg+='. Each player received 5x income to start';
+      toast(msg,'ok');
+    }
+  }
   renderMap(galaxyData);renderStats(galaxyData);renderShips();renderGameBar();updateCapitalPhaseUI();autoSave();
 }
 
@@ -2102,7 +2186,7 @@ function gatherState(){
     },
     galaxy:galaxyData?{systems:galaxyData.systems,lanes:galaxyData.lanes,nPlayers:galaxyData.nPlayers,placedCount:galaxyData.placedCount,reqCount:galaxyData.reqCount,reqSpacing:galaxyData.reqSpacing,usedSpacing:galaxyData.usedSpacing}:null,
     ships,shipIdCounter,activePlayer,turnNum,playerState,capitalPhase,capitals,
-    config:{CLASS_POINTS,POINTS_PER_STAR,CLASS_BUILD_COST,extraShipyardPct,pointStoragePct,prodCfg,fleetAPMax,diploRelations,diploProposals,regionLabels,gameLog,devCfg,winSystems,territoryShading,colorBlindMode,playerProfiles,fleetTemplates,shipRoster,mapNames,laneMin,laneMax,buildingTypes,buildingIdCounter}
+    config:{CLASS_POINTS,POINTS_PER_STAR,CLASS_BUILD_COST,extraShipyardPct,pointStoragePct,prodCfg,fleetAPMax,diploRelations,diploProposals,regionLabels,gameLog,devCfg,winSystems,territoryShading,colorBlindMode,claimMode,playerProfiles,fleetTemplates,shipRoster,mapNames,laneMin,laneMax,buildingTypes,buildingIdCounter}
   };
 }
 function applyState(st){
@@ -2151,6 +2235,7 @@ function applyState(st){
     if(st.config.devCfg)devCfg=Object.assign(devCfg,st.config.devCfg);
     if(typeof st.config.winSystems==='number')winSystems=st.config.winSystems;
     if(typeof st.config.territoryShading==='boolean')territoryShading=st.config.territoryShading;
+    if(st.config.claimMode)claimMode=st.config.claimMode;
     if(st.config.colorBlindMode!==undefined){setColorBlind(st.config.colorBlindMode);}
     if(st.config.buildingTypes){
       buildingTypes=st.config.buildingTypes;
@@ -2382,6 +2467,7 @@ function toggleSetup(){
   if(open)renderSetupPanel();
 }
 function renderSetupPanel(){
+  const cmEl=document.getElementById('p-claimmode');if(cmEl)cmEl.value=claimMode;
   const ids=galaxyData?playerIds():Array.from({length:parseInt(document.getElementById('p-players').value)},(_,i)=>'p'+(i+1));
   // profiles
   const pe=document.getElementById('profile-editor');pe.innerHTML='';
